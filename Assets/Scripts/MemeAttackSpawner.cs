@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 
 public enum MemeOrderMode
@@ -22,6 +23,12 @@ public class MemeAttackData
     public bool allowLeft = true;
     public bool allowRight = true;
     public bool allowCenter = true;
+
+    [Header("Custom Position Override")]
+    [Tooltip("체크하면 스포너 기본 좌표를 무시하고 아래 개별 좌표를 사용합니다.")]
+    public bool useCustomPosition;
+    public Vector2 customObstacleSpawnPos;
+    public Vector2 customWarningSpawnPos;
 }
 
 [RequireComponent(typeof(AudioSource))]
@@ -36,11 +43,27 @@ public class MemeAttackSpawner : MonoBehaviour
 
     [Header("Timing")]
     [SerializeField] private float initialDelay = 1.5f;
-    [Tooltip("돌진 전 경고 깜빡임 지속 시간(초). 0 이하이면 프리팹(MemeAttackObstacle)의 warningDuration을 사용합니다.")]
+    [Tooltip("장애물 생성 전 경고 표시 지속 시간(초). 0 이하이면 프리팹(MemeAttackObstacle)의 warningDuration을 사용합니다.")]
     [SerializeField] private float warningDuration = 0.6f;
     [Tooltip("false면 1번만 출력합니다. 반복 출력이 필요할 때만 켜세요.")]
     [SerializeField] private bool repeatSpawn = false;
     [SerializeField] private float spawnInterval = 4.5f;
+
+    [Header("Warning Indicator")]
+    [Tooltip("비워 두면 기본 '!' 경고 텍스트를 런타임에 생성해 깜빡입니다.")]
+    [SerializeField] private GameObject warningPrefab = null;
+    [Tooltip("Left 스폰 시 경고(!)가 표시될 X 월드 좌표")]
+    [SerializeField] private float leftWarningX = -3.5f;
+    [Tooltip("Right 스폰 시 경고(!)가 표시될 X 월드 좌표")]
+    [SerializeField] private float rightWarningX = 3.5f;
+    [Tooltip("경고(!)의 Y 좌표 오프셋 (스폰 Y + warningOffsetY)")]
+    [SerializeField] private float warningOffsetY = 0.8f;
+    [SerializeField, Min(1)] private int warningBlinkCount = 3;
+    [SerializeField] private Color warningTextColor = new Color(1f, 0.1f, 0.1f, 1f);
+    [SerializeField, Range(0f, 1f)] private float warningTextMinAlpha = 0.15f;
+    [SerializeField, Range(0f, 1f)] private float warningTextMaxAlpha = 1f;
+    [SerializeField] private float warningFontSize = 26f;
+    [SerializeField] private int warningSortingOrder = 16;
 
     [Header("Spawn Positions (Left / Right)")]
     [SerializeField] private float leftSpawnX = -7.5f;
@@ -50,13 +73,14 @@ public class MemeAttackSpawner : MonoBehaviour
 
     [Header("Spawn Position (Center)")]
     [SerializeField] private Vector2 centerSpawnPosition = new Vector2(0f, 2.2f);
-    [SerializeField] private float centerRandomOffsetX = 1.2f;
+    [SerializeField, Min(0f)] private float centerRandomOffsetX = 1.2f;
 
     private readonly List<int> shuffleBag = new List<int>();
     private readonly List<int> validIndicesBuffer = new List<int>();
     private readonly List<YahoSpawnType> allowedSpawnTypesBuffer = new List<YahoSpawnType>(3);
 
     private Coroutine spawnRoutine;
+    private GameObject activeWarningObject;
     private int sequentialCursor;
     private int lastSpawnedIndex = -1;
 
@@ -119,6 +143,16 @@ public class MemeAttackSpawner : MonoBehaviour
         StartSingleAttack(data, spawnType);
     }
 
+    private void OnDisable()
+    {
+        ClearActiveWarning();
+    }
+
+    private void OnDestroy()
+    {
+        ClearActiveWarning();
+    }
+
     private void StartSingleAttack(MemeAttackData data, YahoSpawnType spawnType)
     {
         if (spawnRoutine != null)
@@ -126,6 +160,7 @@ public class MemeAttackSpawner : MonoBehaviour
             StopCoroutine(spawnRoutine);
         }
 
+        ClearActiveWarning();
         spawnRoutine = StartCoroutine(PlayMemeAttackSequence(data, spawnType));
     }
 
@@ -163,7 +198,14 @@ public class MemeAttackSpawner : MonoBehaviour
     {
         EnsureAudioSource();
 
-        Vector3 spawnPos = GetSpawnPosition(spawnType);
+        ResolvePositions(data, spawnType, out Vector3 spawnPos, out Vector3 warningPos);
+        float effectiveWarningDuration = GetEffectiveWarningDuration(data.obstaclePrefab);
+
+        if (effectiveWarningDuration > 0f)
+        {
+            yield return ShowWarningRoutine(warningPos, effectiveWarningDuration, data.obstaclePrefab);
+        }
+
         MemeAttackObstacle instance = Instantiate(data.obstaclePrefab, spawnPos, Quaternion.identity);
         instance.ApplyVisualOverride(data.overrideSprite, data.overrideMaterial);
 
@@ -172,14 +214,92 @@ public class MemeAttackSpawner : MonoBehaviour
 
         instance.Initialize(
             spawnType,
-            skipWarning: false,
-            onAttackBegin: () => PlayAttackSound(clip, volume),
-            warningDurationOverride: warningDuration
+            onAttackBegin: () => PlayAttackSound(clip, volume)
         );
+    }
 
-        while (instance != null && !instance.IsAttacking)
+    private float GetEffectiveWarningDuration(MemeAttackObstacle obstaclePrefab)
+    {
+        if (warningDuration > 0f)
         {
+            return warningDuration;
+        }
+
+        if (obstaclePrefab != null && obstaclePrefab.WarningDuration > 0f)
+        {
+            return obstaclePrefab.WarningDuration;
+        }
+
+        return 0f;
+    }
+
+    private IEnumerator ShowWarningRoutine(Vector3 warningPos, float duration, MemeAttackObstacle obstaclePrefab)
+    {
+        ClearActiveWarning();
+
+        if (warningPrefab != null)
+        {
+            activeWarningObject = Instantiate(warningPrefab, warningPos, Quaternion.identity);
+            yield return new WaitForSeconds(duration);
+            ClearActiveWarning();
+            yield break;
+        }
+
+        TextMeshPro warningText = CreateRuntimeWarningMark(warningPos, obstaclePrefab);
+        activeWarningObject = warningText.gameObject;
+
+        int blinkCount = Mathf.Max(1, warningBlinkCount);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            float normalizedTime = Mathf.Clamp01(elapsed / duration);
+            float blinkT = 1f - Mathf.PingPong(normalizedTime * blinkCount * 2f, 1f);
+
+            if (warningText != null)
+            {
+                Color color = warningTextColor;
+                color.a = Mathf.Lerp(warningTextMinAlpha, warningTextMaxAlpha, blinkT);
+                warningText.color = color;
+            }
+
+            elapsed += Time.deltaTime;
             yield return null;
+        }
+
+        ClearActiveWarning();
+    }
+
+    private TextMeshPro CreateRuntimeWarningMark(Vector3 warningPos, MemeAttackObstacle obstaclePrefab)
+    {
+        GameObject warningObj = new GameObject("WarningMark");
+        warningObj.transform.position = warningPos;
+
+        TextMeshPro warningText = warningObj.AddComponent<TextMeshPro>();
+        warningText.text = "!";
+        warningText.fontSize = warningFontSize;
+        warningText.fontStyle = FontStyles.Bold;
+        warningText.color = warningTextColor;
+        warningText.alignment = TextAlignmentOptions.Center;
+        warningText.textWrappingMode = TextWrappingModes.NoWrap;
+        warningText.overflowMode = TextOverflowModes.Overflow;
+        warningText.rectTransform.sizeDelta = new Vector2(3f, 3f);
+        warningText.sortingOrder = warningSortingOrder;
+
+        if (obstaclePrefab != null && obstaclePrefab.WarningText != null && obstaclePrefab.WarningText.font != null)
+        {
+            warningText.font = obstaclePrefab.WarningText.font;
+        }
+
+        return warningText;
+    }
+
+    private void ClearActiveWarning()
+    {
+        if (activeWarningObject != null)
+        {
+            Destroy(activeWarningObject);
+            activeWarningObject = null;
         }
     }
 
@@ -383,22 +503,123 @@ public class MemeAttackSpawner : MonoBehaviour
         audioSource.spatialBlend = 0f;
     }
 
-    private Vector3 GetSpawnPosition(YahoSpawnType spawnType)
+    private void ResolvePositions(MemeAttackData data, YahoSpawnType spawnType, out Vector3 spawnPos, out Vector3 warningPos)
+    {
+        if (data != null && data.useCustomPosition)
+        {
+            spawnPos = new Vector3(data.customObstacleSpawnPos.x, data.customObstacleSpawnPos.y, 0f);
+            warningPos = new Vector3(data.customWarningSpawnPos.x, data.customWarningSpawnPos.y, 0f);
+            return;
+        }
+
+        ResolveDefaultPositions(spawnType, out spawnPos, out warningPos);
+    }
+
+    private void ResolveDefaultPositions(YahoSpawnType spawnType, out Vector3 spawnPos, out Vector3 warningPos)
     {
         switch (spawnType)
         {
             case YahoSpawnType.Left:
-                return new Vector3(leftSpawnX, UnityEngine.Random.Range(horizontalMinY, horizontalMaxY), 0f);
+            {
+                float spawnY = UnityEngine.Random.Range(horizontalMinY, horizontalMaxY);
+                spawnPos = new Vector3(leftSpawnX, spawnY, 0f);
+                warningPos = new Vector3(leftWarningX, spawnY + warningOffsetY, 0f);
+                break;
+            }
 
             case YahoSpawnType.Right:
-                return new Vector3(rightSpawnX, UnityEngine.Random.Range(horizontalMinY, horizontalMaxY), 0f);
+            {
+                float spawnY = UnityEngine.Random.Range(horizontalMinY, horizontalMaxY);
+                spawnPos = new Vector3(rightSpawnX, spawnY, 0f);
+                warningPos = new Vector3(rightWarningX, spawnY + warningOffsetY, 0f);
+                break;
+            }
 
             case YahoSpawnType.Center:
-                float randomX = centerSpawnPosition.x + UnityEngine.Random.Range(-centerRandomOffsetX, centerRandomOffsetX);
-                return new Vector3(randomX, centerSpawnPosition.y, 0f);
+            {
+                float offsetX = centerRandomOffsetX > 0f
+                    ? UnityEngine.Random.Range(-centerRandomOffsetX, centerRandomOffsetX)
+                    : 0f;
+                spawnPos = new Vector3(centerSpawnPosition.x + offsetX, centerSpawnPosition.y, 0f);
+                warningPos = new Vector3(spawnPos.x, spawnPos.y + warningOffsetY, 0f);
+                break;
+            }
 
             default:
-                return Vector3.zero;
+                spawnPos = Vector3.zero;
+                warningPos = Vector3.zero;
+                break;
+        }
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        const float markerRadius = 0.25f;
+
+        // Default Left / Right Spawn (Cyan) & Warning (Red)
+        float midY = (horizontalMinY + horizontalMaxY) * 0.5f;
+        DrawVerticalRangeGizmo(leftSpawnX, horizontalMinY, horizontalMaxY, Color.cyan, markerRadius);
+        DrawVerticalRangeGizmo(rightSpawnX, horizontalMinY, horizontalMaxY, Color.cyan, markerRadius);
+        DrawVerticalRangeGizmo(leftWarningX, horizontalMinY + warningOffsetY, horizontalMaxY + warningOffsetY, Color.red, markerRadius * 0.8f);
+        DrawVerticalRangeGizmo(rightWarningX, horizontalMinY + warningOffsetY, horizontalMaxY + warningOffsetY, Color.red, markerRadius * 0.8f);
+
+        Gizmos.color = new Color(1f, 1f, 0f, 0.5f);
+        Gizmos.DrawLine(new Vector3(leftSpawnX, midY, 0f), new Vector3(leftWarningX, midY + warningOffsetY, 0f));
+        Gizmos.DrawLine(new Vector3(rightSpawnX, midY, 0f), new Vector3(rightWarningX, midY + warningOffsetY, 0f));
+
+        // Default Center Spawn (Cyan) & Warning (Red)
+        DrawHorizontalRangeGizmo(centerSpawnPosition, centerRandomOffsetX, Color.cyan, markerRadius);
+        DrawHorizontalRangeGizmo(new Vector2(centerSpawnPosition.x, centerSpawnPosition.y + warningOffsetY), centerRandomOffsetX, Color.red, markerRadius * 0.8f);
+
+        // Per-item Custom Positions (Spawn: Green, Warning: Yellow)
+        if (memeAttacks == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < memeAttacks.Count; i++)
+        {
+            MemeAttackData data = memeAttacks[i];
+            if (data == null || !data.useCustomPosition)
+            {
+                continue;
+            }
+
+            Vector3 customSpawn = new Vector3(data.customObstacleSpawnPos.x, data.customObstacleSpawnPos.y, 0f);
+            Vector3 customWarning = new Vector3(data.customWarningSpawnPos.x, data.customWarningSpawnPos.y, 0f);
+
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(customSpawn, markerRadius);
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireSphere(customWarning, markerRadius * 0.8f);
+            Gizmos.color = new Color(0.5f, 1f, 0.5f, 0.6f);
+            Gizmos.DrawLine(customSpawn, customWarning);
+        }
+    }
+
+    private static void DrawVerticalRangeGizmo(float x, float minY, float maxY, Color color, float radius)
+    {
+        Gizmos.color = color;
+        Vector3 minPoint = new Vector3(x, minY, 0f);
+        Vector3 maxPoint = new Vector3(x, maxY, 0f);
+        Gizmos.DrawWireSphere(minPoint, radius);
+        if (!Mathf.Approximately(minY, maxY))
+        {
+            Gizmos.DrawWireSphere(maxPoint, radius);
+            Gizmos.DrawLine(minPoint, maxPoint);
+        }
+    }
+
+    private static void DrawHorizontalRangeGizmo(Vector2 center, float offsetX, Color color, float radius)
+    {
+        Gizmos.color = color;
+        Vector3 centerPoint = new Vector3(center.x, center.y, 0f);
+        Gizmos.DrawWireSphere(centerPoint, radius);
+        if (offsetX > 0f)
+        {
+            Vector3 leftPoint = new Vector3(center.x - offsetX, center.y, 0f);
+            Vector3 rightPoint = new Vector3(center.x + offsetX, center.y, 0f);
+            Gizmos.DrawLine(leftPoint, rightPoint);
         }
     }
 }

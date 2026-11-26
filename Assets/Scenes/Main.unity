@@ -411,6 +411,9 @@ MonoBehaviour:
     allowLeft: 0
     allowRight: 1
     allowCenter: 0
+    useCustomPosition: 0
+    customObstacleSpawnPos: {x: 0, y: 0}
+    customWarningSpawnPos: {x: 0, y: 0}
   - obstaclePrefab: {fileID: 7803701249840195810, guid: f944aa2a2778b7c44ae5577b63a5bb1a, type: 3}
     overrideSprite: {fileID: 0}
     overrideMaterial: {fileID: 0}
@@ -420,16 +423,29 @@ MonoBehaviour:
     allowLeft: 1
     allowRight: 1
     allowCenter: 1
+    useCustomPosition: 0
+    customObstacleSpawnPos: {x: 0, y: 0}
+    customWarningSpawnPos: {x: 0, y: 0}
   audioSource: {fileID: 503906691}
   initialDelay: 1.5
-  warningDuration: 0.6
+  warningDuration: 1
   repeatSpawn: 1
   spawnInterval: 4.5
-  leftSpawnX: -7.5
-  rightSpawnX: 7.5
-  horizontalMinY: -4.3
-  horizontalMaxY: -4.3
-  centerSpawnPosition: {x: 0, y: 2}
+  warningPrefab: {fileID: 3835444878251977874, guid: 835ed0ae7c186ea48bbf3bd704bdc1f3, type: 3}
+  leftWarningX: -9
+  rightWarningX: 9
+  warningOffsetY: 1
+  warningBlinkCount: 3
+  warningTextColor: {r: 1, g: 0.1, b: 0.1, a: 1}
+  warningTextMinAlpha: 0.15
+  warningTextMaxAlpha: 1
+  warningFontSize: 26
+  warningSortingOrder: 16
+  leftSpawnX: -13
+  rightSpawnX: 13
+  horizontalMinY: -4
+  horizontalMaxY: -4
+  centerSpawnPosition: {x: 0, y: 1}
   centerRandomOffsetX: 0
 --- !u!1 &519420028
 GameObject:

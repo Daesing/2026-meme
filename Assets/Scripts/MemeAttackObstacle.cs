@@ -23,16 +23,9 @@ public class MemeAttackObstacle : MonoBehaviour
     [SerializeField] private Collider2D obstacleCollider;
     [SerializeField] private TextMeshPro warningText;
 
-    [Header("Warning Phase")]
+    [Header("Warning Reference (Used by Spawner)")]
     [SerializeField] private float warningDuration = 0.6f;
     [SerializeField, Min(1)] private int warningBlinkCount = 3;
-    [SerializeField] private Color warningSpriteColor = new Color(1f, 0.25f, 0.25f, 1f);
-    [SerializeField, Range(0f, 1f)] private float warningMinAlpha = 0.15f;
-    [SerializeField, Range(0f, 1f)] private float warningMaxAlpha = 0.65f;
-    [SerializeField] private Color warningTextColor = new Color(1f, 0.1f, 0.1f, 1f);
-    [SerializeField, Range(0f, 1f)] private float warningTextMinAlpha = 0.15f;
-    [SerializeField, Range(0f, 1f)] private float warningTextMaxAlpha = 1f;
-    [SerializeField] private float defaultWarningFontSize = 26f;
 
     [Header("Horizontal Dash (Left / Right)")]
     [SerializeField] private float horizontalDashSpeed = 18f;
@@ -55,19 +48,19 @@ public class MemeAttackObstacle : MonoBehaviour
     private Color baseColor = Color.white;
     private bool baseColorCached;
     private Action onAttackBeginCallback;
-    private float activeWarningDuration;
-    private float phaseTimer;
     private bool isAttacking;
     private bool hasHitPlayer;
 
     public YahoSpawnType SpawnType => spawnType;
     public bool IsAttacking => isAttacking;
     public float WarningDuration => warningDuration;
+    public int WarningBlinkCount => warningBlinkCount;
+    public TextMeshPro WarningText => warningText;
 
     private void Awake()
     {
         EnsureComponents();
-        activeWarningDuration = warningDuration;
+        HideWarningText();
     }
 
     public void ApplyVisualOverride(Sprite overrideSprite, Material overrideMaterial)
@@ -95,18 +88,12 @@ public class MemeAttackObstacle : MonoBehaviour
         }
     }
 
-    public void Initialize(
-        YahoSpawnType type,
-        bool skipWarning = false,
-        Action onAttackBegin = null,
-        float warningDurationOverride = -1f)
+    public void Initialize(YahoSpawnType type, Action onAttackBegin = null)
     {
         EnsureComponents();
 
         spawnType = type;
         onAttackBeginCallback = onAttackBegin;
-        activeWarningDuration = warningDurationOverride > 0f ? warningDurationOverride : warningDuration;
-        phaseTimer = 0f;
         isAttacking = false;
         hasHitPlayer = false;
 
@@ -121,46 +108,17 @@ public class MemeAttackObstacle : MonoBehaviour
             transform.localScale = Vector3.one * horizontalScale;
         }
 
-        if (skipWarning || activeWarningDuration <= 0f)
-        {
-            BeginAttack();
-            return;
-        }
-
-        if (obstacleCollider != null)
-        {
-            obstacleCollider.enabled = false;
-        }
-
-        SetWarningTextVisible(true);
-        ApplyWarningVisual(1f);
+        BeginAttack();
     }
 
     private void Update()
     {
         if (!isAttacking)
         {
-            UpdateWarningPhase();
             return;
         }
 
         UpdateAttackPhase();
-    }
-
-    private void UpdateWarningPhase()
-    {
-        phaseTimer += Time.deltaTime;
-
-        if (phaseTimer >= activeWarningDuration)
-        {
-            BeginAttack();
-            return;
-        }
-
-        int blinkCount = Mathf.Max(1, warningBlinkCount);
-        float normalizedTime = Mathf.Clamp01(phaseTimer / activeWarningDuration);
-        float blinkT = 1f - Mathf.PingPong(normalizedTime * blinkCount * 2f, 1f);
-        ApplyWarningVisual(blinkT);
     }
 
     private void BeginAttack()
@@ -171,7 +129,7 @@ public class MemeAttackObstacle : MonoBehaviour
         }
 
         isAttacking = true;
-        SetWarningTextVisible(false);
+        HideWarningText();
         spriteRenderer.color = baseColor;
 
         if (obstacleCollider != null)
@@ -243,34 +201,12 @@ public class MemeAttackObstacle : MonoBehaviour
         }
     }
 
-    private void ApplyWarningVisual(float blinkT)
+    private void HideWarningText()
     {
-        Color tintedSpriteColor = warningSpriteColor;
-        tintedSpriteColor.a = Mathf.Lerp(warningMinAlpha, warningMaxAlpha, blinkT);
-        spriteRenderer.color = tintedSpriteColor;
-
         if (warningText != null)
         {
-            Color exclamationColor = warningTextColor;
-            exclamationColor.a = Mathf.Lerp(warningTextMinAlpha, warningTextMaxAlpha, blinkT);
-            warningText.color = exclamationColor;
+            warningText.gameObject.SetActive(false);
         }
-    }
-
-    private void SetWarningTextVisible(bool visible)
-    {
-        if (warningText == null)
-        {
-            return;
-        }
-
-        if (visible)
-        {
-            warningText.text = "!";
-            warningText.sortingOrder = spriteRenderer != null ? spriteRenderer.sortingOrder + 1 : 16;
-        }
-
-        warningText.gameObject.SetActive(visible);
     }
 
     private void EnsureComponents()
@@ -302,32 +238,9 @@ public class MemeAttackObstacle : MonoBehaviour
         rb.bodyType = RigidbodyType2D.Kinematic;
         rb.gravityScale = 0f;
 
-        EnsureWarningText();
-    }
-
-    private void EnsureWarningText()
-    {
         if (warningText == null)
         {
             warningText = GetComponentInChildren<TextMeshPro>(true);
-        }
-
-        if (warningText == null)
-        {
-            GameObject warningObj = new GameObject("WarningMark");
-            warningObj.transform.SetParent(transform, false);
-            warningObj.transform.localPosition = Vector3.zero;
-
-            warningText = warningObj.AddComponent<TextMeshPro>();
-            warningText.text = "!";
-            warningText.fontSize = defaultWarningFontSize;
-            warningText.fontStyle = FontStyles.Bold;
-            warningText.color = warningTextColor;
-            warningText.alignment = TextAlignmentOptions.Center;
-            warningText.textWrappingMode = TextWrappingModes.NoWrap;
-            warningText.overflowMode = TextOverflowModes.Overflow;
-            warningText.rectTransform.sizeDelta = new Vector2(3f, 3f);
-            warningText.sortingOrder = spriteRenderer != null ? spriteRenderer.sortingOrder + 1 : 16;
         }
     }
 }
