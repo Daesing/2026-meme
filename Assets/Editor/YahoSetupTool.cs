@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using TMPro;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -10,8 +11,13 @@ public static class YahoSetupTool
 {
     private const string PrefabDirectory = "Assets/Prefabs";
     private const string PrefabPath = "Assets/Prefabs/YahoObstacle.prefab";
+    private const string DefaultFontPath = "Assets/Font/Recipekorea SDF.asset";
+    private const string WarningMarkName = "WarningMark";
     private const float TargetPixelsPerUnit = 400f;
     private const float HitboxScale = 0.75f;
+    private const float WarningDuration = 0.6f;
+    private const int WarningBlinkCount = 3;
+    private const float WarningFontSize = 26f;
 
     [MenuItem("Tools/Setup Yaho Attack")]
     public static void SetupYahoAttack()
@@ -59,14 +65,14 @@ public static class YahoSetupTool
             Debug.LogWarning("[YahoSetupTool] Assets/Audio 폴더에서 yaho 효과음 클립을 찾지 못했습니다.");
         }
 
-        YahoAttackObstacle prefabComponent = CreateOrUpdateYahoPrefab(yahoSprite, yahoMaterial);
+        MemeAttackObstacle prefabComponent = CreateOrUpdateYahoPrefab(yahoSprite, yahoMaterial);
         if (prefabComponent == null)
         {
             Debug.LogError("[YahoSetupTool] YahoObstacle 프리팹 생성에 실패했습니다.");
             return;
         }
 
-        YahoAttackSpawner spawner = SetupSceneSpawner(prefabComponent, yahoClip);
+        MemeAttackSpawner spawner = SetupSceneSpawner(prefabComponent, yahoSprite, yahoMaterial, yahoClip);
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
@@ -82,8 +88,8 @@ public static class YahoSetupTool
             $"- 이미지: {yahoTexturePath} (Sprite, PPU={TargetPixelsPerUnit})\n" +
             $"- 머티리얼: {(yahoMaterial != null ? matPath : "기본값")}\n" +
             $"- 효과음: {(yahoClip != null ? audioPath : "없음")}\n" +
-            $"- 프리팹: {PrefabPath}\n" +
-            $"- 씬 스포너: {(spawner != null ? spawner.name : "없음")}"
+            $"- 프리팹: {PrefabPath} (경고용 '!' TextMeshPro 자식 포함)\n" +
+            $"- 씬 스포너: {(spawner != null ? $"{spawner.name} (MemeAttackSpawner, 1번 항목 등록)" : "없음")}"
         );
     }
 
@@ -197,7 +203,7 @@ public static class YahoSetupTool
             .FirstOrDefault();
     }
 
-    private static YahoAttackObstacle CreateOrUpdateYahoPrefab(Sprite yahoSprite, Material yahoMaterial)
+    private static MemeAttackObstacle CreateOrUpdateYahoPrefab(Sprite yahoSprite, Material yahoMaterial)
     {
         if (!AssetDatabase.IsValidFolder(PrefabDirectory))
         {
@@ -228,14 +234,19 @@ public static class YahoSetupTool
             rb.bodyType = RigidbodyType2D.Kinematic;
             rb.gravityScale = 0f;
 
-            YahoAttackObstacle obstacle = root.AddComponent<YahoAttackObstacle>();
+            TextMeshPro warningText = CreateWarningMarkChild(root.transform, sr.sortingOrder + 1);
+
+            MemeAttackObstacle obstacle = root.AddComponent<MemeAttackObstacle>();
             SerializedObject serializedObstacle = new SerializedObject(obstacle);
             serializedObstacle.FindProperty("spriteRenderer").objectReferenceValue = sr;
             serializedObstacle.FindProperty("obstacleCollider").objectReferenceValue = boxCollider;
+            serializedObstacle.FindProperty("warningText").objectReferenceValue = warningText;
+            serializedObstacle.FindProperty("warningDuration").floatValue = WarningDuration;
+            serializedObstacle.FindProperty("warningBlinkCount").intValue = WarningBlinkCount;
             serializedObstacle.ApplyModifiedPropertiesWithoutUndo();
 
             GameObject savedPrefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
-            return savedPrefab != null ? savedPrefab.GetComponent<YahoAttackObstacle>() : null;
+            return savedPrefab != null ? savedPrefab.GetComponent<MemeAttackObstacle>() : null;
         }
         finally
         {
@@ -243,14 +254,79 @@ public static class YahoSetupTool
         }
     }
 
-    private static YahoAttackSpawner SetupSceneSpawner(YahoAttackObstacle prefabComponent, AudioClip yahoClip)
+    private static TextMeshPro CreateWarningMarkChild(Transform parent, int sortingOrder)
     {
-        YahoAttackSpawner spawner = UnityEngine.Object.FindAnyObjectByType<YahoAttackSpawner>();
+        GameObject warningObj = new GameObject(WarningMarkName);
+        warningObj.transform.SetParent(parent, false);
+        warningObj.transform.localPosition = Vector3.zero;
+
+        TextMeshPro warningText = warningObj.AddComponent<TextMeshPro>();
+        warningText.text = "!";
+        warningText.fontSize = WarningFontSize;
+        warningText.fontStyle = FontStyles.Bold;
+        warningText.color = new Color(1f, 0.1f, 0.1f, 1f);
+        warningText.alignment = TextAlignmentOptions.Center;
+        warningText.textWrappingMode = TextWrappingModes.NoWrap;
+        warningText.overflowMode = TextOverflowModes.Overflow;
+        warningText.sortingOrder = sortingOrder;
+        warningText.rectTransform.sizeDelta = new Vector2(3f, 3f);
+
+        TMP_FontAsset fontAsset = FindWarningFontAsset();
+        if (fontAsset != null)
+        {
+            warningText.font = fontAsset;
+        }
+
+        return warningText;
+    }
+
+    private static TMP_FontAsset FindWarningFontAsset()
+    {
+        TMP_FontAsset fontAsset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(DefaultFontPath);
+        if (fontAsset != null)
+        {
+            return fontAsset;
+        }
+
+        if (AssetDatabase.IsValidFolder("Assets/Font"))
+        {
+            string[] guids = AssetDatabase.FindAssets("t:TMP_FontAsset", new[] { "Assets/Font" });
+            if (guids.Length > 0)
+            {
+                return AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(AssetDatabase.GUIDToAssetPath(guids[0]));
+            }
+        }
+
+        return TMP_Settings.defaultFontAsset;
+    }
+
+    private static MemeAttackSpawner SetupSceneSpawner(
+        MemeAttackObstacle prefabComponent,
+        Sprite yahoSprite,
+        Material yahoMaterial,
+        AudioClip yahoClip)
+    {
+        MemeAttackSpawner spawner = UnityEngine.Object.FindAnyObjectByType<MemeAttackSpawner>();
         if (spawner == null)
         {
-            GameObject spawnerObj = new GameObject("YahoAttackSpawner");
-            spawner = spawnerObj.AddComponent<YahoAttackSpawner>();
-            Undo.RegisterCreatedObjectUndo(spawnerObj, "Create YahoAttackSpawner");
+            GameObject legacySpawnerObj = GameObject.Find("YahoAttackSpawner");
+            if (legacySpawnerObj != null)
+            {
+                Undo.RegisterCompleteObjectUndo(legacySpawnerObj, "Convert YahoAttackSpawner to MemeAttackSpawner");
+                GameObjectUtility.RemoveMonoBehavioursWithMissingScript(legacySpawnerObj);
+                legacySpawnerObj.name = "MemeAttackSpawner";
+                spawner = legacySpawnerObj.GetComponent<MemeAttackSpawner>();
+                if (spawner == null)
+                {
+                    spawner = Undo.AddComponent<MemeAttackSpawner>(legacySpawnerObj);
+                }
+            }
+            else
+            {
+                GameObject spawnerObj = new GameObject("MemeAttackSpawner");
+                spawner = spawnerObj.AddComponent<MemeAttackSpawner>();
+                Undo.RegisterCreatedObjectUndo(spawnerObj, "Create MemeAttackSpawner");
+            }
         }
 
         AudioSource audioSource = spawner.GetComponent<AudioSource>();
@@ -264,10 +340,28 @@ public static class YahoSetupTool
         EditorUtility.SetDirty(audioSource);
 
         SerializedObject serializedSpawner = new SerializedObject(spawner);
-        serializedSpawner.FindProperty("yahoObstaclePrefab").objectReferenceValue = prefabComponent;
+        serializedSpawner.FindProperty("orderMode").enumValueIndex = (int)MemeOrderMode.ShuffleBag;
         serializedSpawner.FindProperty("audioSource").objectReferenceValue = audioSource;
-        serializedSpawner.FindProperty("yahoSound").objectReferenceValue = yahoClip;
+        serializedSpawner.FindProperty("warningDuration").floatValue = WarningDuration;
         serializedSpawner.FindProperty("repeatSpawn").boolValue = false;
+
+        SerializedProperty memeAttacksProp = serializedSpawner.FindProperty("memeAttacks");
+        if (memeAttacksProp.arraySize == 0)
+        {
+            memeAttacksProp.InsertArrayElementAtIndex(0);
+        }
+
+        SerializedProperty firstEntry = memeAttacksProp.GetArrayElementAtIndex(0);
+        firstEntry.FindPropertyRelative("obstaclePrefab").objectReferenceValue = prefabComponent;
+        firstEntry.FindPropertyRelative("overrideSprite").objectReferenceValue = yahoSprite;
+        firstEntry.FindPropertyRelative("overrideMaterial").objectReferenceValue = yahoMaterial;
+        firstEntry.FindPropertyRelative("attackSound").objectReferenceValue = yahoClip;
+        firstEntry.FindPropertyRelative("soundVolume").floatValue = 1f;
+        firstEntry.FindPropertyRelative("spawnWeight").floatValue = 1f;
+        firstEntry.FindPropertyRelative("allowLeft").boolValue = true;
+        firstEntry.FindPropertyRelative("allowRight").boolValue = true;
+        firstEntry.FindPropertyRelative("allowCenter").boolValue = true;
+
         serializedSpawner.ApplyModifiedProperties();
 
         EditorUtility.SetDirty(spawner);
