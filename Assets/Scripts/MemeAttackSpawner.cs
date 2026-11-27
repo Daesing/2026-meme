@@ -99,6 +99,27 @@ public class MemeAttackSpawner : MonoBehaviour
 
     private void Start()
     {
+        if (GameManager.Instance != null)
+        {
+            if (GameManager.Instance.IsGameStarted)
+            {
+                StartSpawning();
+            }
+
+            return;
+        }
+
+        // GameManager 없이 스포너 단독 테스트 시 자동 스폰 fallback
+        StartSpawning();
+    }
+
+    public void StartSpawning()
+    {
+        if (!isActiveAndEnabled || spawnRoutine != null)
+        {
+            return;
+        }
+
         if (!HasValidPattern())
         {
             Debug.LogWarning("[MemeAttackSpawner] 등록된 유효한 MemePatternData가 없습니다. 프로젝트 창에서 MemeGame/Meme Pattern 에셋을 생성해 등록하거나 'Tools/Meme Game/Setup Meme Attack'을 실행해 주세요.");

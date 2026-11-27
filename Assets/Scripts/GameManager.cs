@@ -11,6 +11,10 @@ public class GameManager : MonoBehaviour
     public static event Action<int> OnScoreChanged;
     public static event Action OnGameOver;
     public static event Action<MemePatternData, float, int> OnGameOverResultReady;
+    public event Action OnExamStarted;
+
+    [Header("Title Screen")]
+    [SerializeField] private bool useTitleScreen = true;
 
     [Header("Player Status")]
     [SerializeField, Min(1)] private int maxHp = 3;
@@ -37,18 +41,29 @@ public class GameManager : MonoBehaviour
     [Header("Invincibility")]
     [SerializeField, Min(0f)] private float invincibleDuration = 1.7f;
 
+    private static bool skipTitleOnNextLoad = false;
+
     private MemePatternData lastKillerPattern;
     private Coroutine gameOverRoutine;
     private Coroutine invincibilityRoutine;
     private bool isInvincible;
+    private bool isGameStarted;
 
     public int MaxHp => maxHp;
     public int CurrentHp => currentHp;
     public float SurvivalTime => survivalTime;
     public int Score => score;
+    public bool IsGameStarted => isGameStarted;
     public bool IsGameOver => isGameOver;
     public bool IsInvincible => isInvincible;
+    public bool ShouldWaitForTitle => useTitleScreen && !skipTitleOnNextLoad;
     public MemePatternData LastKillerPattern => lastKillerPattern;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStaticState()
+    {
+        skipTitleOnNextLoad = false;
+    }
 
     private void Awake()
     {
@@ -64,6 +79,7 @@ public class GameManager : MonoBehaviour
         currentHp = maxHp;
         survivalTime = 0f;
         score = 0;
+        isGameStarted = false;
         isGameOver = false;
         lastKillerPattern = null;
         ResetInvincibility();
@@ -90,13 +106,24 @@ public class GameManager : MonoBehaviour
 
     private void Start()
     {
-        OnHpChanged?.Invoke(currentHp, maxHp);
-        OnScoreChanged?.Invoke(score);
+        if (useTitleScreen && !skipTitleOnNextLoad)
+        {
+            isGameStarted = false;
+            DisablePlayerInput();
+            StopSpawners();
+            OnHpChanged?.Invoke(currentHp, maxHp);
+            OnScoreChanged?.Invoke(score);
+        }
+        else
+        {
+            skipTitleOnNextLoad = false;
+            StartExam();
+        }
     }
 
     private void Update()
     {
-        if (isGameOver)
+        if (!isGameStarted || isGameOver)
         {
             return;
         }
@@ -110,6 +137,24 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    public void StartExam()
+    {
+        if (Instance != this || isGameStarted || isGameOver)
+        {
+            return;
+        }
+
+        isGameStarted = true;
+        Time.timeScale = 1f;
+
+        EnablePlayerInput();
+        StartSpawners();
+
+        OnHpChanged?.Invoke(currentHp, maxHp);
+        OnScoreChanged?.Invoke(score);
+        OnExamStarted?.Invoke();
+    }
+
     public void RestartGame()
     {
         ResetInvincibility();
@@ -120,12 +165,14 @@ public class GameManager : MonoBehaviour
         }
 
         isGameOver = false;
+        isGameStarted = false;
         currentHp = maxHp;
         survivalTime = 0f;
         score = 0;
         OnHpChanged?.Invoke(currentHp, maxHp);
         OnScoreChanged?.Invoke(score);
 
+        skipTitleOnNextLoad = true;
         Time.timeScale = 1f;
         Scene activeScene = SceneManager.GetActiveScene();
         SceneManager.LoadScene(activeScene.buildIndex);
@@ -174,7 +221,7 @@ public class GameManager : MonoBehaviour
 
     private void HandleMemeAttackHit(MemeAttackObstacle obstacle)
     {
-        if (isInvincible)
+        if (!isGameStarted || isGameOver || isInvincible)
         {
             return;
         }
@@ -188,9 +235,9 @@ public class GameManager : MonoBehaviour
 
     private void ApplyPlayerDamage(int amount, MemePatternData sourcePattern)
     {
-        if (Instance != this || isGameOver || isInvincible)
+        if (Instance != this || !isGameStarted || isGameOver || isInvincible)
         {
-            Debug.LogWarning($"[GameManager] ApplyPlayerDamage 무시됨: isInstance={Instance == this}, isGameOver={isGameOver}, isInvincible={isInvincible}");
+            Debug.LogWarning($"[GameManager] ApplyPlayerDamage 무시됨: isInstance={Instance == this}, isGameStarted={isGameStarted}, isGameOver={isGameOver}, isInvincible={isInvincible}");
             return;
         }
 
@@ -299,6 +346,15 @@ public class GameManager : MonoBehaviour
         gameOverRoutine = null;
     }
 
+    private void EnablePlayerInput()
+    {
+        PlayerBoxController player = ResolvePlayerController();
+        if (player != null)
+        {
+            player.SetInputEnabled(true);
+        }
+    }
+
     private void DisablePlayerInput()
     {
         PlayerBoxController player = ResolvePlayerController();
@@ -316,6 +372,24 @@ public class GameManager : MonoBehaviour
         }
 
         return playerController;
+    }
+
+    private void StartSpawners()
+    {
+        if (spawner != null)
+        {
+            spawner.StartSpawning();
+            return;
+        }
+
+        MemeAttackSpawner[] spawners = FindObjectsByType<MemeAttackSpawner>(FindObjectsSortMode.None);
+        for (int i = 0; i < spawners.Length; i++)
+        {
+            if (spawners[i] != null)
+            {
+                spawners[i].StartSpawning();
+            }
+        }
     }
 
     private void StopSpawners()

@@ -22,6 +22,7 @@ public class GameHudUI : MonoBehaviour
     private bool hasSyncedInitialState;
     private bool hasDisplayedScore;
     private int lastDisplayedScore = -1;
+    private GameManager subscribedGameManager;
 
     private void OnEnable()
     {
@@ -51,6 +52,12 @@ public class GameHudUI : MonoBehaviour
         hasSyncedInitialState = false;
     }
 
+    private void OnDestroy()
+    {
+        UnsubscribeEvents();
+        UnsubscribeExamStarted();
+    }
+
     private void SubscribeEvents()
     {
         if (isSubscribed)
@@ -77,7 +84,50 @@ public class GameHudUI : MonoBehaviour
         isSubscribed = false;
     }
 
+    private void SubscribeExamStarted(GameManager manager)
+    {
+        if (manager == null || subscribedGameManager == manager)
+        {
+            return;
+        }
+
+        UnsubscribeExamStarted();
+        manager.OnExamStarted += HandleExamStarted;
+        subscribedGameManager = manager;
+    }
+
+    private void UnsubscribeExamStarted()
+    {
+        if (subscribedGameManager != null)
+        {
+            subscribedGameManager.OnExamStarted -= HandleExamStarted;
+            subscribedGameManager = null;
+        }
+    }
+
     private void TrySyncWithGameManager()
+    {
+        GameManager manager = GameManager.Instance;
+        if (manager == null)
+        {
+            return;
+        }
+
+        SubscribeExamStarted(manager);
+        hasSyncedInitialState = true;
+        hasDisplayedScore = false;
+
+        bool shouldShowHud = manager.IsGameStarted && (!hideOnGameOver || !manager.IsGameOver);
+        SetHudVisible(shouldShowHud);
+
+        if (manager.IsGameStarted)
+        {
+            HandleHpChanged(manager.CurrentHp, manager.MaxHp);
+            HandleScoreChanged(manager.Score);
+        }
+    }
+
+    private void HandleExamStarted()
     {
         GameManager manager = GameManager.Instance;
         if (manager == null)
@@ -114,7 +164,7 @@ public class GameHudUI : MonoBehaviour
             hpText.text = $"기회 : {clampedCurrent} / {clampedMax}";
         }
 
-        if (hideOnGameOver && GameManager.Instance != null && !GameManager.Instance.IsGameOver)
+        if (hideOnGameOver && GameManager.Instance != null && GameManager.Instance.IsGameStarted && !GameManager.Instance.IsGameOver)
         {
             SetHudVisible(true);
         }
