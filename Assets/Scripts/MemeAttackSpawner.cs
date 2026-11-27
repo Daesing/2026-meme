@@ -115,6 +115,17 @@ public class MemeAttackSpawner : MonoBehaviour
         lastSpawnedIndex = -1;
     }
 
+    public void StopSpawning()
+    {
+        if (spawnRoutine != null)
+        {
+            StopCoroutine(spawnRoutine);
+            spawnRoutine = null;
+        }
+
+        ClearActiveWarning();
+    }
+
     public void SpawnNextAttack()
     {
         int nextIndex = SelectNextPatternIndex();
@@ -205,6 +216,7 @@ public class MemeAttackSpawner : MonoBehaviour
         }
 
         MemeAttackObstacle instance = Instantiate(pattern.obstaclePrefab, spawnPos, Quaternion.identity);
+        instance.SetSourcePattern(pattern);
         instance.ApplyVisualOverride(pattern.overrideSprite, pattern.overrideMaterial);
 
         AudioClip attackSfx = pattern.attackSfx;
@@ -213,7 +225,8 @@ public class MemeAttackSpawner : MonoBehaviour
         instance.Initialize(
             spawnType,
             pattern.moveSpeed,
-            onAttackBegin: () => AudioManager.Instance?.PlaySFX(attackSfx, volume)
+            onAttackBegin: () => AudioManager.Instance?.PlaySFX(attackSfx, volume),
+            sourcePattern: pattern
         );
     }
 

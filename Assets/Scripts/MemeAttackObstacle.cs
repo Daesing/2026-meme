@@ -52,12 +52,18 @@ public class MemeAttackObstacle : MonoBehaviour
     private bool isAttacking;
     private bool hasHitPlayer;
 
+    public MemePatternData SourcePattern { get; private set; }
     public MemeSpawnType SpawnType => spawnType;
     public float ActiveMoveSpeed => activeMoveSpeed;
     public bool IsAttacking => isAttacking;
     public float WarningDuration => warningDuration;
     public int WarningBlinkCount => warningBlinkCount;
     public TextMeshPro WarningText => warningText;
+
+    public void SetSourcePattern(MemePatternData pattern)
+    {
+        SourcePattern = pattern;
+    }
 
     private void Awake()
     {
@@ -96,9 +102,14 @@ public class MemeAttackObstacle : MonoBehaviour
         Initialize(type, defaultSpeed, onAttackBegin);
     }
 
-    public void Initialize(MemeSpawnType type, float moveSpeed, Action onAttackBegin = null)
+    public void Initialize(MemeSpawnType type, float moveSpeed, Action onAttackBegin = null, MemePatternData sourcePattern = null)
     {
         EnsureComponents();
+
+        if (sourcePattern != null)
+        {
+            SourcePattern = sourcePattern;
+        }
 
         spawnType = type;
         activeMoveSpeed = Mathf.Max(0f, moveSpeed);
@@ -196,18 +207,47 @@ public class MemeAttackObstacle : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        if (!isAttacking || hasHitPlayer)
+        TryHandlePlayerHit(other);
+    }
+
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (collision != null)
+        {
+            TryHandlePlayerHit(collision.collider);
+        }
+    }
+
+    private void TryHandlePlayerHit(Collider2D other)
+    {
+        if (!isAttacking || hasHitPlayer || other == null)
         {
             return;
         }
 
+        if (!IsPlayerCollider(other))
+        {
+            return;
+        }
+
+        hasHitPlayer = true;
+        string patternName = SourcePattern != null ? SourcePattern.name : "None";
+        int listenerCount = OnPlayerHit != null ? OnPlayerHit.GetInvocationList().Length : 0;
+        Debug.Log($"[MemeAttackObstacle] 플레이어 충돌 감지! 대상={other.name}(Tag={other.tag}), 출현={spawnType}, 패턴={patternName}, OnPlayerHit구독자={listenerCount}");
+
+        OnPlayerHit?.Invoke(this);
+        onPlayerHit?.Invoke();
+    }
+
+    private static bool IsPlayerCollider(Collider2D other)
+    {
         if (other.CompareTag("Player"))
         {
-            hasHitPlayer = true;
-            Debug.Log($"[MemeAttackObstacle] 플레이어 피격 / 게임오버! (출현 위치: {spawnType})");
-            OnPlayerHit?.Invoke(this);
-            onPlayerHit?.Invoke();
+            return true;
         }
+
+        return other.GetComponent<PlayerBoxController>() != null
+            || other.GetComponentInParent<PlayerBoxController>() != null;
     }
 
     private void HideWarningText()

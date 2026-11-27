@@ -41,4 +41,10 @@ public class MemePatternData : ScriptableObject
     public bool useCustomPosition;
     public Vector2 customObstacleSpawnPos;
     public Vector2 customWarningSpawnPos;
+
+    [Header("Report Card")]
+    [Tooltip("게임 오버 성적표에 표시될 밈 이름")]
+    public string memeTitle;
+    [Tooltip("게임 오버 성적표에 표시될 탈락 한줄평")]
+    [TextArea(2, 4)] public string failComment;
 }

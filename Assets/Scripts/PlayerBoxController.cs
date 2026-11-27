@@ -21,6 +21,25 @@ public class PlayerBoxController : MonoBehaviour
     private float moveInputX;
     private bool jumpRequested;
     private int jumpsRemaining;
+    private bool inputEnabled = true;
+
+    public bool InputEnabled => inputEnabled;
+
+    public void SetInputEnabled(bool isEnabled)
+    {
+        inputEnabled = isEnabled;
+
+        if (!inputEnabled)
+        {
+            moveInputX = 0f;
+            jumpRequested = false;
+
+            if (rb != null)
+            {
+                rb.linearVelocity = Vector2.zero;
+            }
+        }
+    }
 
     private void Awake()
     {
@@ -37,6 +56,13 @@ public class PlayerBoxController : MonoBehaviour
 
     private void Update()
     {
+        if (!inputEnabled)
+        {
+            moveInputX = 0f;
+            jumpRequested = false;
+            return;
+        }
+
         float horizontal = 0f;
 
 #if ENABLE_INPUT_SYSTEM
@@ -66,6 +92,11 @@ public class PlayerBoxController : MonoBehaviour
 
     private void FixedUpdate()
     {
+        if (!inputEnabled)
+        {
+            return;
+        }
+
         bool isGrounded = CheckGrounded();
 
         if (isGrounded && rb.linearVelocity.y <= 0.05f)
