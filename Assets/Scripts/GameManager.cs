@@ -25,6 +25,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private PlayerBoxController playerController;
     [SerializeField] private MemeAttackSpawner spawner;
     [SerializeField] private HitFeelController hitFeelController;
+    [SerializeField] private ResultReportUI resultReportUI;
 
     [Header("Hit Feel & Game Over Sequence")]
     [SerializeField, Min(0f)] private float hitstopDuration = 0.08f;
@@ -195,6 +196,17 @@ public class GameManager : MonoBehaviour
 
         Debug.Log($"[GameManager] 게임 오버! 탈락 주범: {killerName}, 생존 시간: {survivalTime:F2}초, 점수: {score}");
 
+        ResultReportUI reportUI = ResolveResultReportUI();
+        if (reportUI != null)
+        {
+            float bestScore = Mathf.Max(ResultReportUI.GetSavedBestScore(), score);
+            reportUI.ShowReport(score, bestScore, lastKillerPattern);
+        }
+        else
+        {
+            Debug.LogWarning("[GameManager] ResultReportUI를 찾지 못했습니다. Tools > Meme Game > Create Result Report UI로 생성해 주세요.");
+        }
+
         OnGameOver?.Invoke();
         OnGameOverResultReady?.Invoke(lastKillerPattern, survivalTime, score);
 
@@ -258,6 +270,17 @@ public class GameManager : MonoBehaviour
         }
 
         return hitFeelController;
+    }
+
+    private ResultReportUI ResolveResultReportUI()
+    {
+        if (resultReportUI != null)
+        {
+            return resultReportUI;
+        }
+
+        resultReportUI = FindFirstObjectByType<ResultReportUI>(FindObjectsInactive.Include);
+        return resultReportUI;
     }
 
     private int CalculateScore(float elapsedSeconds)
