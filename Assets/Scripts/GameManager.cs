@@ -38,13 +38,11 @@ public class GameManager : MonoBehaviour
 
     private void OnEnable()
     {
-        SubtitleObstacle.OnPlayerHit += HandleSubtitleHit;
         MemeAttackObstacle.OnPlayerHit += HandleMemeAttackHit;
     }
 
     private void OnDisable()
     {
-        SubtitleObstacle.OnPlayerHit -= HandleSubtitleHit;
         MemeAttackObstacle.OnPlayerHit -= HandleMemeAttackHit;
     }
 
@@ -76,11 +74,6 @@ public class GameManager : MonoBehaviour
         Time.timeScale = 1f;
         Scene activeScene = SceneManager.GetActiveScene();
         SceneManager.LoadScene(activeScene.buildIndex);
-    }
-
-    private void HandleSubtitleHit(SubtitleObstacle obstacle)
-    {
-        ApplyPlayerDamage(1);
     }
 
     private void HandleMemeAttackHit(MemeAttackObstacle obstacle)
