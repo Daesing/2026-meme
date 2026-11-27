@@ -45,6 +45,7 @@ public class MemeAttackObstacle : MonoBehaviour
 
     private Rigidbody2D rb;
     private YahoSpawnType spawnType = YahoSpawnType.Left;
+    private float activeMoveSpeed = 10f;
     private Color baseColor = Color.white;
     private bool baseColorCached;
     private Action onAttackBeginCallback;
@@ -52,6 +53,7 @@ public class MemeAttackObstacle : MonoBehaviour
     private bool hasHitPlayer;
 
     public YahoSpawnType SpawnType => spawnType;
+    public float ActiveMoveSpeed => activeMoveSpeed;
     public bool IsAttacking => isAttacking;
     public float WarningDuration => warningDuration;
     public int WarningBlinkCount => warningBlinkCount;
@@ -90,9 +92,16 @@ public class MemeAttackObstacle : MonoBehaviour
 
     public void Initialize(YahoSpawnType type, Action onAttackBegin = null)
     {
+        float defaultSpeed = type == YahoSpawnType.Center ? centerDownSpeed : horizontalDashSpeed;
+        Initialize(type, defaultSpeed, onAttackBegin);
+    }
+
+    public void Initialize(YahoSpawnType type, float moveSpeed, Action onAttackBegin = null)
+    {
         EnsureComponents();
 
         spawnType = type;
+        activeMoveSpeed = Mathf.Max(0f, moveSpeed);
         onAttackBeginCallback = onAttackBegin;
         isAttacking = false;
         hasHitPlayer = false;
@@ -152,7 +161,7 @@ public class MemeAttackObstacle : MonoBehaviour
         switch (spawnType)
         {
             case YahoSpawnType.Left:
-                pos.x += horizontalDashSpeed * Time.deltaTime;
+                pos.x += activeMoveSpeed * Time.deltaTime;
                 transform.position = pos;
                 if (pos.x > offScreenLimitX)
                 {
@@ -161,7 +170,7 @@ public class MemeAttackObstacle : MonoBehaviour
                 break;
 
             case YahoSpawnType.Right:
-                pos.x -= horizontalDashSpeed * Time.deltaTime;
+                pos.x -= activeMoveSpeed * Time.deltaTime;
                 transform.position = pos;
                 if (pos.x < -offScreenLimitX)
                 {
@@ -170,7 +179,7 @@ public class MemeAttackObstacle : MonoBehaviour
                 break;
 
             case YahoSpawnType.Center:
-                pos.y -= centerDownSpeed * Time.deltaTime;
+                pos.y -= activeMoveSpeed * Time.deltaTime;
                 transform.position = pos;
 
                 float currentScale = transform.localScale.x;

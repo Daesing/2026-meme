@@ -1,9 +1,7 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 public enum MemeOrderMode
 {
@@ -12,32 +10,11 @@ public enum MemeOrderMode
     WeightedRandom
 }
 
-[Serializable]
-public class MemeAttackData
-{
-    public MemeAttackObstacle obstaclePrefab;
-    public Sprite overrideSprite;
-    public Material overrideMaterial;
-    [FormerlySerializedAs("attackSound")]
-    public AudioClip attackSfx;
-    [Range(0f, 1f)] public float soundVolume = 1f;
-    [Min(0.01f)] public float spawnWeight = 1f;
-    public bool allowLeft = true;
-    public bool allowRight = true;
-    public bool allowCenter = true;
-
-    [Header("Custom Position Override")]
-    [Tooltip("체크하면 스포너 기본 좌표를 무시하고 아래 개별 좌표를 사용합니다.")]
-    public bool useCustomPosition;
-    public Vector2 customObstacleSpawnPos;
-    public Vector2 customWarningSpawnPos;
-}
-
 public class MemeAttackSpawner : MonoBehaviour
 {
-    [Header("Meme Attacks")]
+    [Header("Meme Patterns")]
     [SerializeField] private MemeOrderMode orderMode = MemeOrderMode.ShuffleBag;
-    [SerializeField] private List<MemeAttackData> memeAttacks = new List<MemeAttackData>();
+    [SerializeField] private List<MemePatternData> patterns = new List<MemePatternData>();
 
     [Header("Timing")]
     [SerializeField] private float initialDelay = 1.5f;
@@ -88,13 +65,13 @@ public class MemeAttackSpawner : MonoBehaviour
         set => orderMode = value;
     }
 
-    public IReadOnlyList<MemeAttackData> MemeAttacks => memeAttacks;
+    public IReadOnlyList<MemePatternData> Patterns => patterns;
 
     private void Start()
     {
-        if (!HasValidAttackData())
+        if (!HasValidPattern())
         {
-            Debug.LogWarning("[MemeAttackSpawner] 등록된 유효한 MemeAttackData가 없습니다. 상단 메뉴 'Tools/Setup Yaho Attack'을 실행해 주세요.");
+            Debug.LogWarning("[MemeAttackSpawner] 등록된 유효한 MemePatternData가 없습니다. 프로젝트 창에서 MemeGame/Meme Pattern 에셋을 생성해 등록하거나 'Tools/Setup Yaho Attack'을 실행해 주세요.");
             return;
         }
 
@@ -110,30 +87,30 @@ public class MemeAttackSpawner : MonoBehaviour
 
     public void SpawnNextAttack()
     {
-        int nextIndex = SelectNextAttackIndex();
+        int nextIndex = SelectNextPatternIndex();
         if (nextIndex < 0)
         {
-            Debug.LogWarning("[MemeAttackSpawner] 출력할 유효한 MemeAttackData가 없습니다.");
+            Debug.LogWarning("[MemeAttackSpawner] 출력할 유효한 MemePatternData가 없습니다.");
             return;
         }
 
-        MemeAttackData data = memeAttacks[nextIndex];
-        YahoSpawnType spawnType = PickSpawnType(data);
-        StartSingleAttack(data, spawnType);
+        MemePatternData pattern = patterns[nextIndex];
+        YahoSpawnType spawnType = PickSpawnType(pattern);
+        StartSingleAttack(pattern, spawnType);
     }
 
     public void SpawnAttack(int index, YahoSpawnType? forcedSpawnType = null)
     {
-        if (index < 0 || index >= memeAttacks.Count || memeAttacks[index] == null || memeAttacks[index].obstaclePrefab == null)
+        if (!IsValidPatternIndex(index))
         {
-            Debug.LogWarning($"[MemeAttackSpawner] 인덱스 {index}에 유효한 MemeAttackData(또는 obstaclePrefab)가 없습니다.");
+            Debug.LogWarning($"[MemeAttackSpawner] 인덱스 {index}에 유효한 MemePatternData(또는 obstaclePrefab)가 없습니다.");
             return;
         }
 
         lastSpawnedIndex = index;
-        MemeAttackData data = memeAttacks[index];
-        YahoSpawnType spawnType = forcedSpawnType ?? PickSpawnType(data);
-        StartSingleAttack(data, spawnType);
+        MemePatternData pattern = patterns[index];
+        YahoSpawnType spawnType = forcedSpawnType ?? PickSpawnType(pattern);
+        StartSingleAttack(pattern, spawnType);
     }
 
     private void OnDisable()
@@ -146,7 +123,7 @@ public class MemeAttackSpawner : MonoBehaviour
         ClearActiveWarning();
     }
 
-    private void StartSingleAttack(MemeAttackData data, YahoSpawnType spawnType)
+    private void StartSingleAttack(MemePatternData pattern, YahoSpawnType spawnType)
     {
         if (spawnRoutine != null)
         {
@@ -154,7 +131,7 @@ public class MemeAttackSpawner : MonoBehaviour
         }
 
         ClearActiveWarning();
-        spawnRoutine = StartCoroutine(PlayMemeAttackSequence(data, spawnType));
+        spawnRoutine = StartCoroutine(PlayMemeAttackSequence(pattern, spawnType));
     }
 
     private IEnumerator AutoSpawnLoop()
@@ -166,16 +143,16 @@ public class MemeAttackSpawner : MonoBehaviour
 
         do
         {
-            int nextIndex = SelectNextAttackIndex();
+            int nextIndex = SelectNextPatternIndex();
             if (nextIndex < 0)
             {
-                Debug.LogWarning("[MemeAttackSpawner] 등록된 유효한 MemeAttackData가 없어 스폰을 중단합니다.");
+                Debug.LogWarning("[MemeAttackSpawner] 등록된 유효한 MemePatternData가 없어 스폰을 중단합니다.");
                 break;
             }
 
-            MemeAttackData data = memeAttacks[nextIndex];
-            YahoSpawnType spawnType = PickSpawnType(data);
-            yield return PlayMemeAttackSequence(data, spawnType);
+            MemePatternData pattern = patterns[nextIndex];
+            YahoSpawnType spawnType = PickSpawnType(pattern);
+            yield return PlayMemeAttackSequence(pattern, spawnType);
 
             if (repeatSpawn && spawnInterval > 0f)
             {
@@ -187,24 +164,25 @@ public class MemeAttackSpawner : MonoBehaviour
         spawnRoutine = null;
     }
 
-    private IEnumerator PlayMemeAttackSequence(MemeAttackData data, YahoSpawnType spawnType)
+    private IEnumerator PlayMemeAttackSequence(MemePatternData pattern, YahoSpawnType spawnType)
     {
-        ResolvePositions(data, spawnType, out Vector3 spawnPos, out Vector3 warningPos);
-        float effectiveWarningDuration = GetEffectiveWarningDuration(data.obstaclePrefab);
+        ResolvePositions(pattern, spawnType, out Vector3 spawnPos, out Vector3 warningPos);
+        float effectiveWarningDuration = GetEffectiveWarningDuration(pattern.obstaclePrefab);
 
         if (effectiveWarningDuration > 0f)
         {
-            yield return ShowWarningRoutine(warningPos, effectiveWarningDuration, data.obstaclePrefab);
+            yield return ShowWarningRoutine(warningPos, effectiveWarningDuration, pattern.obstaclePrefab);
         }
 
-        MemeAttackObstacle instance = Instantiate(data.obstaclePrefab, spawnPos, Quaternion.identity);
-        instance.ApplyVisualOverride(data.overrideSprite, data.overrideMaterial);
+        MemeAttackObstacle instance = Instantiate(pattern.obstaclePrefab, spawnPos, Quaternion.identity);
+        instance.ApplyVisualOverride(pattern.overrideSprite, pattern.overrideMaterial);
 
-        AudioClip attackSfx = data.attackSfx;
-        float volume = data.soundVolume;
+        AudioClip attackSfx = pattern.attackSfx;
+        float volume = pattern.soundVolume;
 
         instance.Initialize(
             spawnType,
+            pattern.moveSpeed,
             onAttackBegin: () => AudioManager.Instance?.PlaySFX(attackSfx, volume)
         );
     }
@@ -295,7 +273,7 @@ public class MemeAttackSpawner : MonoBehaviour
         }
     }
 
-    private int SelectNextAttackIndex()
+    private int SelectNextPatternIndex()
     {
         CollectValidIndices();
         if (validIndicesBuffer.Count == 0)
@@ -322,7 +300,7 @@ public class MemeAttackSpawner : MonoBehaviour
         for (int i = shuffleBag.Count - 1; i >= 0; i--)
         {
             int idx = shuffleBag[i];
-            if (!IsValidAttackIndex(idx))
+            if (!IsValidPatternIndex(idx))
             {
                 shuffleBag.RemoveAt(i);
             }
@@ -354,16 +332,16 @@ public class MemeAttackSpawner : MonoBehaviour
 
         for (int i = shuffleBag.Count - 1; i > 0; i--)
         {
-            int j = UnityEngine.Random.Range(0, i + 1);
+            int j = Random.Range(0, i + 1);
             int temp = shuffleBag[i];
             shuffleBag[i] = shuffleBag[j];
             shuffleBag[j] = temp;
         }
 
-        // 가방이 리필될 때 직전에 나온 장애물이 바로 연속으로 다시 나오지 않도록 방지
+        // 가방이 리필될 때 직전에 나온 패턴이 바로 연속으로 다시 나오지 않도록 방지
         if (shuffleBag.Count > 1 && lastSpawnedIndex >= 0 && shuffleBag[0] == lastSpawnedIndex)
         {
-            int swapIndex = UnityEngine.Random.Range(1, shuffleBag.Count);
+            int swapIndex = Random.Range(1, shuffleBag.Count);
             int temp = shuffleBag[0];
             shuffleBag[0] = shuffleBag[swapIndex];
             shuffleBag[swapIndex] = temp;
@@ -385,24 +363,24 @@ public class MemeAttackSpawner : MonoBehaviour
         for (int i = 0; i < validIndicesBuffer.Count; i++)
         {
             int idx = validIndicesBuffer[i];
-            totalWeight += Mathf.Max(0f, memeAttacks[idx].spawnWeight);
+            totalWeight += Mathf.Max(0f, patterns[idx].spawnWeight);
         }
 
         int selectedIndex;
         if (totalWeight <= 0f)
         {
-            selectedIndex = validIndicesBuffer[UnityEngine.Random.Range(0, validIndicesBuffer.Count)];
+            selectedIndex = validIndicesBuffer[Random.Range(0, validIndicesBuffer.Count)];
         }
         else
         {
-            float roll = UnityEngine.Random.Range(0f, totalWeight);
+            float roll = Random.Range(0f, totalWeight);
             float cumulative = 0f;
             selectedIndex = validIndicesBuffer[validIndicesBuffer.Count - 1];
 
             for (int i = 0; i < validIndicesBuffer.Count; i++)
             {
                 int idx = validIndicesBuffer[i];
-                cumulative += Mathf.Max(0f, memeAttacks[idx].spawnWeight);
+                cumulative += Mathf.Max(0f, patterns[idx].spawnWeight);
                 if (roll <= cumulative)
                 {
                     selectedIndex = idx;
@@ -415,39 +393,49 @@ public class MemeAttackSpawner : MonoBehaviour
         return selectedIndex;
     }
 
-    private YahoSpawnType PickSpawnType(MemeAttackData data)
+    private YahoSpawnType PickSpawnType(MemePatternData pattern)
     {
         allowedSpawnTypesBuffer.Clear();
-        if (data.allowLeft) allowedSpawnTypesBuffer.Add(YahoSpawnType.Left);
-        if (data.allowRight) allowedSpawnTypesBuffer.Add(YahoSpawnType.Right);
-        if (data.allowCenter) allowedSpawnTypesBuffer.Add(YahoSpawnType.Center);
+        if (pattern.allowLeft) allowedSpawnTypesBuffer.Add(YahoSpawnType.Left);
+        if (pattern.allowRight) allowedSpawnTypesBuffer.Add(YahoSpawnType.Right);
+        if (pattern.allowCenter) allowedSpawnTypesBuffer.Add(YahoSpawnType.Center);
 
         if (allowedSpawnTypesBuffer.Count == 0)
         {
-            return (YahoSpawnType)UnityEngine.Random.Range(0, 3);
+            return (YahoSpawnType)Random.Range(0, 3);
         }
 
-        int pick = UnityEngine.Random.Range(0, allowedSpawnTypesBuffer.Count);
+        int pick = Random.Range(0, allowedSpawnTypesBuffer.Count);
         return allowedSpawnTypesBuffer[pick];
     }
 
     private void CollectValidIndices()
     {
         validIndicesBuffer.Clear();
-        for (int i = 0; i < memeAttacks.Count; i++)
+        if (patterns == null)
         {
-            if (IsValidAttackIndex(i))
+            return;
+        }
+
+        for (int i = 0; i < patterns.Count; i++)
+        {
+            if (IsValidPatternIndex(i))
             {
                 validIndicesBuffer.Add(i);
             }
         }
     }
 
-    private bool HasValidAttackData()
+    private bool HasValidPattern()
     {
-        for (int i = 0; i < memeAttacks.Count; i++)
+        if (patterns == null)
         {
-            if (IsValidAttackIndex(i))
+            return false;
+        }
+
+        for (int i = 0; i < patterns.Count; i++)
+        {
+            if (IsValidPatternIndex(i))
             {
                 return true;
             }
@@ -456,20 +444,21 @@ public class MemeAttackSpawner : MonoBehaviour
         return false;
     }
 
-    private bool IsValidAttackIndex(int index)
+    private bool IsValidPatternIndex(int index)
     {
-        return index >= 0
-            && index < memeAttacks.Count
-            && memeAttacks[index] != null
-            && memeAttacks[index].obstaclePrefab != null;
+        return patterns != null
+            && index >= 0
+            && index < patterns.Count
+            && patterns[index] != null
+            && patterns[index].obstaclePrefab != null;
     }
 
-    private void ResolvePositions(MemeAttackData data, YahoSpawnType spawnType, out Vector3 spawnPos, out Vector3 warningPos)
+    private void ResolvePositions(MemePatternData pattern, YahoSpawnType spawnType, out Vector3 spawnPos, out Vector3 warningPos)
     {
-        if (data != null && data.useCustomPosition)
+        if (pattern != null && pattern.useCustomPosition)
         {
-            spawnPos = new Vector3(data.customObstacleSpawnPos.x, data.customObstacleSpawnPos.y, 0f);
-            warningPos = new Vector3(data.customWarningSpawnPos.x, data.customWarningSpawnPos.y, 0f);
+            spawnPos = new Vector3(pattern.customObstacleSpawnPos.x, pattern.customObstacleSpawnPos.y, 0f);
+            warningPos = new Vector3(pattern.customWarningSpawnPos.x, pattern.customWarningSpawnPos.y, 0f);
             return;
         }
 
@@ -482,7 +471,7 @@ public class MemeAttackSpawner : MonoBehaviour
         {
             case YahoSpawnType.Left:
             {
-                float spawnY = UnityEngine.Random.Range(horizontalMinY, horizontalMaxY);
+                float spawnY = Random.Range(horizontalMinY, horizontalMaxY);
                 spawnPos = new Vector3(leftSpawnX, spawnY, 0f);
                 warningPos = new Vector3(leftWarningX, spawnY + warningOffsetY, 0f);
                 break;
@@ -490,7 +479,7 @@ public class MemeAttackSpawner : MonoBehaviour
 
             case YahoSpawnType.Right:
             {
-                float spawnY = UnityEngine.Random.Range(horizontalMinY, horizontalMaxY);
+                float spawnY = Random.Range(horizontalMinY, horizontalMaxY);
                 spawnPos = new Vector3(rightSpawnX, spawnY, 0f);
                 warningPos = new Vector3(rightWarningX, spawnY + warningOffsetY, 0f);
                 break;
@@ -499,7 +488,7 @@ public class MemeAttackSpawner : MonoBehaviour
             case YahoSpawnType.Center:
             {
                 float offsetX = centerRandomOffsetX > 0f
-                    ? UnityEngine.Random.Range(-centerRandomOffsetX, centerRandomOffsetX)
+                    ? Random.Range(-centerRandomOffsetX, centerRandomOffsetX)
                     : 0f;
                 spawnPos = new Vector3(centerSpawnPosition.x + offsetX, centerSpawnPosition.y, 0f);
                 warningPos = new Vector3(spawnPos.x, spawnPos.y + warningOffsetY, 0f);
@@ -532,22 +521,22 @@ public class MemeAttackSpawner : MonoBehaviour
         DrawHorizontalRangeGizmo(centerSpawnPosition, centerRandomOffsetX, Color.cyan, markerRadius);
         DrawHorizontalRangeGizmo(new Vector2(centerSpawnPosition.x, centerSpawnPosition.y + warningOffsetY), centerRandomOffsetX, Color.red, markerRadius * 0.8f);
 
-        // Per-item Custom Positions (Spawn: Green, Warning: Yellow)
-        if (memeAttacks == null)
+        // Per-pattern Custom Positions (Spawn: Green, Warning: Yellow)
+        if (patterns == null)
         {
             return;
         }
 
-        for (int i = 0; i < memeAttacks.Count; i++)
+        for (int i = 0; i < patterns.Count; i++)
         {
-            MemeAttackData data = memeAttacks[i];
-            if (data == null || !data.useCustomPosition)
+            MemePatternData pattern = patterns[i];
+            if (pattern == null || !pattern.useCustomPosition)
             {
                 continue;
             }
 
-            Vector3 customSpawn = new Vector3(data.customObstacleSpawnPos.x, data.customObstacleSpawnPos.y, 0f);
-            Vector3 customWarning = new Vector3(data.customWarningSpawnPos.x, data.customWarningSpawnPos.y, 0f);
+            Vector3 customSpawn = new Vector3(pattern.customObstacleSpawnPos.x, pattern.customObstacleSpawnPos.y, 0f);
+            Vector3 customWarning = new Vector3(pattern.customWarningSpawnPos.x, pattern.customWarningSpawnPos.y, 0f);
 
             Gizmos.color = Color.green;
             Gizmos.DrawWireSphere(customSpawn, markerRadius);
