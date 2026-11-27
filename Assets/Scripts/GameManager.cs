@@ -8,6 +8,7 @@ public class GameManager : MonoBehaviour
     public static GameManager Instance { get; private set; }
 
     public static event Action<int, int> OnHpChanged;
+    public static event Action<int> OnScoreChanged;
     public static event Action OnGameOver;
     public static event Action<MemePatternData, float, int> OnGameOverResultReady;
 
@@ -33,14 +34,20 @@ public class GameManager : MonoBehaviour
     [SerializeField, Min(0f)] private float shakeMagnitude = 0.15f;
     [SerializeField, Min(0f)] private float gameOverResultDelay = 0.4f;
 
+    [Header("Invincibility")]
+    [SerializeField, Min(0f)] private float invincibleDuration = 1.7f;
+
     private MemePatternData lastKillerPattern;
     private Coroutine gameOverRoutine;
+    private Coroutine invincibilityRoutine;
+    private bool isInvincible;
 
     public int MaxHp => maxHp;
     public int CurrentHp => currentHp;
     public float SurvivalTime => survivalTime;
     public int Score => score;
     public bool IsGameOver => isGameOver;
+    public bool IsInvincible => isInvincible;
     public MemePatternData LastKillerPattern => lastKillerPattern;
 
     private void Awake()
@@ -59,6 +66,7 @@ public class GameManager : MonoBehaviour
         score = 0;
         isGameOver = false;
         lastKillerPattern = null;
+        ResetInvincibility();
     }
 
     private void OnEnable()
@@ -69,6 +77,7 @@ public class GameManager : MonoBehaviour
     private void OnDisable()
     {
         MemeAttackObstacle.OnPlayerHit -= HandleMemeAttackHit;
+        ResetInvincibility();
     }
 
     private void OnDestroy()
@@ -82,6 +91,7 @@ public class GameManager : MonoBehaviour
     private void Start()
     {
         OnHpChanged?.Invoke(currentHp, maxHp);
+        OnScoreChanged?.Invoke(score);
     }
 
     private void Update()
@@ -92,11 +102,30 @@ public class GameManager : MonoBehaviour
         }
 
         survivalTime += Time.deltaTime;
-        score = CalculateScore(survivalTime);
+        int updatedScore = CalculateScore(survivalTime);
+        if (updatedScore != score)
+        {
+            score = updatedScore;
+            OnScoreChanged?.Invoke(score);
+        }
     }
 
     public void RestartGame()
     {
+        ResetInvincibility();
+        PlayerBoxController player = ResolvePlayerController();
+        if (player != null)
+        {
+            player.ResetHitFlash();
+        }
+
+        isGameOver = false;
+        currentHp = maxHp;
+        survivalTime = 0f;
+        score = 0;
+        OnHpChanged?.Invoke(currentHp, maxHp);
+        OnScoreChanged?.Invoke(score);
+
         Time.timeScale = 1f;
         Scene activeScene = SceneManager.GetActiveScene();
         SceneManager.LoadScene(activeScene.buildIndex);
@@ -110,8 +139,21 @@ public class GameManager : MonoBehaviour
         }
 
         isGameOver = true;
+        ResetInvincibility();
         lastKillerPattern = killerPattern;
-        score = CalculateScore(survivalTime);
+
+        int finalScore = CalculateScore(survivalTime);
+        if (finalScore != score)
+        {
+            score = finalScore;
+            OnScoreChanged?.Invoke(score);
+        }
+
+        PlayerBoxController player = ResolvePlayerController();
+        if (player != null)
+        {
+            player.ResetHitFlash();
+        }
 
         DisablePlayerInput();
         StopSpawners();
@@ -132,6 +174,11 @@ public class GameManager : MonoBehaviour
 
     private void HandleMemeAttackHit(MemeAttackObstacle obstacle)
     {
+        if (isInvincible)
+        {
+            return;
+        }
+
         MemePatternData killerPattern = obstacle != null ? obstacle.SourcePattern : null;
         string obstacleName = obstacle != null ? obstacle.name : "Null";
         string patternName = killerPattern != null ? killerPattern.name : "Null";
@@ -141,9 +188,9 @@ public class GameManager : MonoBehaviour
 
     private void ApplyPlayerDamage(int amount, MemePatternData sourcePattern)
     {
-        if (Instance != this || isGameOver)
+        if (Instance != this || isGameOver || isInvincible)
         {
-            Debug.LogWarning($"[GameManager] ApplyPlayerDamage 무시됨: isInstance={Instance == this}, isGameOver={isGameOver}");
+            Debug.LogWarning($"[GameManager] ApplyPlayerDamage 무시됨: isInstance={Instance == this}, isGameOver={isGameOver}, isInvincible={isInvincible}");
             return;
         }
 
@@ -158,6 +205,14 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        StartInvincibility(invincibleDuration);
+
+        PlayerBoxController player = ResolvePlayerController();
+        if (player != null)
+        {
+            player.PlayHitFlash(invincibleDuration);
+        }
+
         HitFeelController feelController = ResolveHitFeelController();
         if (feelController != null)
         {
@@ -168,6 +223,37 @@ public class GameManager : MonoBehaviour
         {
             Debug.LogWarning("[GameManager] HitFeelController를 찾거나 생성하지 못했습니다.");
         }
+    }
+
+    private void StartInvincibility(float duration)
+    {
+        ResetInvincibility();
+
+        if (duration <= 0f || !isActiveAndEnabled)
+        {
+            return;
+        }
+
+        isInvincible = true;
+        invincibilityRoutine = StartCoroutine(InvincibilityRoutine(duration));
+    }
+
+    private IEnumerator InvincibilityRoutine(float duration)
+    {
+        yield return new WaitForSecondsRealtime(duration);
+        isInvincible = false;
+        invincibilityRoutine = null;
+    }
+
+    private void ResetInvincibility()
+    {
+        if (invincibilityRoutine != null)
+        {
+            StopCoroutine(invincibilityRoutine);
+            invincibilityRoutine = null;
+        }
+
+        isInvincible = false;
     }
 
     private IEnumerator GameOverSequenceRoutine()
@@ -215,15 +301,21 @@ public class GameManager : MonoBehaviour
 
     private void DisablePlayerInput()
     {
+        PlayerBoxController player = ResolvePlayerController();
+        if (player != null)
+        {
+            player.SetInputEnabled(false);
+        }
+    }
+
+    private PlayerBoxController ResolvePlayerController()
+    {
         if (playerController == null)
         {
             playerController = FindAnyObjectByType<PlayerBoxController>();
         }
 
-        if (playerController != null)
-        {
-            playerController.SetInputEnabled(false);
-        }
+        return playerController;
     }
 
     private void StopSpawners()

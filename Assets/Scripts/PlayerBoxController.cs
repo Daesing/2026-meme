@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -16,8 +17,16 @@ public class PlayerBoxController : MonoBehaviour
     [SerializeField] private float gravityScale = 3f;
     [SerializeField] private float groundCheckDistance = 0.1f;
 
+    [Header("Hit Flash")]
+    [SerializeField] private Color hitFlashColor = new Color(1f, 0.25f, 0.25f, 0.65f);
+    [SerializeField, Min(0.01f)] private float hitFlashInterval = 0.12f;
+
     private Rigidbody2D rb;
     private BoxCollider2D boxCollider;
+    private SpriteRenderer spriteRenderer;
+    private Color originalColor = Color.white;
+    private bool hasOriginalColor;
+    private Coroutine hitFlashRoutine;
     private float moveInputX;
     private bool jumpRequested;
     private int jumpsRemaining;
@@ -41,10 +50,35 @@ public class PlayerBoxController : MonoBehaviour
         }
     }
 
+    public void PlayHitFlash(float duration)
+    {
+        ResetHitFlash();
+        CacheSpriteRenderer();
+
+        if (spriteRenderer == null || duration <= 0f || !isActiveAndEnabled)
+        {
+            return;
+        }
+
+        hitFlashRoutine = StartCoroutine(HitFlashRoutine(duration));
+    }
+
+    public void ResetHitFlash()
+    {
+        if (hitFlashRoutine != null)
+        {
+            StopCoroutine(hitFlashRoutine);
+            hitFlashRoutine = null;
+        }
+
+        RestoreOriginalColor();
+    }
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         boxCollider = GetComponent<BoxCollider2D>();
+        CacheSpriteRenderer();
 
         rb.gravityScale = gravityScale;
         rb.freezeRotation = true;
@@ -52,6 +86,11 @@ public class PlayerBoxController : MonoBehaviour
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
 
         jumpsRemaining = maxJumps;
+    }
+
+    private void OnDisable()
+    {
+        ResetHitFlash();
     }
 
     private void Update()
@@ -151,5 +190,63 @@ public class PlayerBoxController : MonoBehaviour
         }
 
         return false;
+    }
+
+    private void CacheSpriteRenderer()
+    {
+        if (spriteRenderer == null)
+        {
+            spriteRenderer = GetComponent<SpriteRenderer>();
+            if (spriteRenderer == null)
+            {
+                spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+            }
+        }
+
+        if (spriteRenderer != null && !hasOriginalColor)
+        {
+            originalColor = spriteRenderer.color;
+            hasOriginalColor = true;
+        }
+    }
+
+    private void RestoreOriginalColor()
+    {
+        if (spriteRenderer != null && hasOriginalColor)
+        {
+            spriteRenderer.color = originalColor;
+        }
+    }
+
+    private IEnumerator HitFlashRoutine(float duration)
+    {
+        float interval = Mathf.Max(0.01f, hitFlashInterval);
+        float elapsed = 0f;
+        bool useFlashColor = true;
+
+        while (elapsed < duration)
+        {
+            if (spriteRenderer == null)
+            {
+                break;
+            }
+
+            spriteRenderer.color = useFlashColor ? hitFlashColor : originalColor;
+            useFlashColor = !useFlashColor;
+
+            float remaining = duration - elapsed;
+            float waitTime = Mathf.Min(interval, remaining);
+            if (waitTime <= 0f)
+            {
+                break;
+            }
+
+            float stepStart = Time.unscaledTime;
+            yield return new WaitForSecondsRealtime(waitTime);
+            elapsed += Mathf.Max(Time.unscaledTime - stepStart, Time.unscaledDeltaTime);
+        }
+
+        RestoreOriginalColor();
+        hitFlashRoutine = null;
     }
 }

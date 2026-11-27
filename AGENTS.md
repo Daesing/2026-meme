@@ -1,3 +1,91 @@
-# Unity Project AI Rules
-- 사용자가 명시적으로 요청하지 않는 한 `.unity`, `.prefab`, `.asset` 파일의 직렬화된 인스펙터 값(Transform, Scale, Speed, Position, 참조 연결)을 절대 수정하거나 초기화하지 말 것.
-- 기본 작업은 `Assets/Scripts/` 내의 `.cs` 파일 수정으로 한정할 것.
+# AGENTS.md — 2026-meme Unity 프로젝트 AI 작업 규칙
+
+이 문서는 본 Unity 2D 프로젝트(`2026-meme`)에서 AI 에이전트가 코드를 분석·수정·추가할 때 반드시 준수해야 하는 아키텍처 요약과 작업 규칙을 정의합니다.
+
+---
+
+## 1. 프로젝트 폴더 및 핵심 파일 구조
+
+### `Assets/Scripts/`
+- `Assets/Scripts/GameManager.cs`
+- `Assets/Scripts/MemePatternData.cs`
+- `Assets/Scripts/MemeAttackSpawner.cs`
+- `Assets/Scripts/MemeAttackObstacle.cs`
+- `Assets/Scripts/HitFeelController.cs`
+- `Assets/Scripts/PlayerBoxController.cs`
+- `Assets/Scripts/AudioManager.cs`
+- `Assets/Scripts/CameraFollow2D.cs`
+- `Assets/Scripts/UI/ResultReportUI.cs`
+
+### `Assets/Prefabs/`
+- `Assets/Prefabs/UmmObstacle.prefab` — 밈 장애물 프리팹
+- `Assets/Prefabs/YahoObstacle.prefab` — 밈 장애물 프리팹
+- `Assets/Prefabs/WarningMark.prefab` — 느낌표(`!`) 경고 프리팹
+- `Assets/Prefabs/WarningTrajectory.prefab` — 공격 궤적 반투명 띠 경고 프리팹
+
+### 기타 주요 폴더 (참고)
+- `Assets/Patterns/` — `MemePatternData` ScriptableObject 에셋 (`UmmPattern.asset`, `YahoPattern.asset`)
+- `Assets/Scenes/` — `Main.unity`
+- `Assets/Editor/` — 에디터 셋업 툴 (`MemeSetupTool.cs`, `ResultReportUITool.cs`)
+
+---
+
+## 2. 현재 프로젝트 아키텍처 요약
+
+### 핵심 시스템 스크립트
+- **`GameManager`** (`Assets/Scripts/GameManager.cs`)
+  - 싱글톤(`GameManager.Instance`)으로 게임 전체 상태(`isGameOver`), 플레이어 체력(`maxHp`, `currentHp`), 생존 시간(`survivalTime`), 점수(`score`, `scorePerSecond` 기반)를 총괄합니다.
+  - `MemeAttackObstacle.OnPlayerHit` 정적 이벤트를 구독하여 피격 처리(`HandleMemeAttackHit` → `ApplyPlayerDamage`)와 게임오버 시퀀스(`TriggerGameOver` → `GameOverSequenceRoutine`)를 실행합니다.
+  - 게임오버 시 플레이어 입력 비활성화, 스포너 중단, 히트 필 연출 대기, `Time.timeScale = 0f` 적용, `ResultReportUI.ShowReport` 호출 및 `OnGameOver` / `OnGameOverResultReady` 이벤트를 발행합니다.
+  - **중요: 별도의 `PlayerHealth` 스크립트는 존재하지 않으며, 체력 시스템은 `GameManager`에 통합되어 있습니다. 별도의 체력 스크립트를 새로 만들지 마세요.**
+
+- **`MemePatternData`** (`Assets/Scripts/MemePatternData.cs`)
+  - 장애물 패턴을 정의하는 `ScriptableObject` (`CreateAssetMenu: MemeGame/Meme Pattern`)입니다.
+  - 주요 데이터: 장애물 프리팹/비주얼(`obstaclePrefab`, `overrideSprite`, `overrideMaterial`), 사운드(`attackSfx`, `soundVolume`), 이동 속도(`moveSpeed`), 경고 설정(`warningStyle` [`WarningStyle`: `Exclamation` / `Trajectory` / `Both`], `trajectoryThickness`, `trajectoryColor`, `blinkCount`), 스폰 설정(`spawnWeight`, `allowLeft`, `allowRight`, `allowCenter`, `useCustomPosition`, `customObstacleSpawnPos`, `customWarningSpawnPos`), 성적표 정보(`memeTitle`, `failComment`).
+
+- **`MemeAttackSpawner`** (`Assets/Scripts/MemeAttackSpawner.cs`)
+  - `MemeOrderMode`(`ShuffleBag` 기본, `Sequential`, `WeightedRandom`) 기반으로 등록된 `MemePatternData` 패턴을 선택해 스폰합니다. (셔플 백 리필 시 직전 패턴 연속 출현 방지 포함)
+  - 공격 전 `WarningStyle`에 따라 점멸 경고 연출(기본 3회 점멸, `blinkCount` 적용)을 수행하며 `WarningTrajectory`(`WarningTrajectory.prefab`)와 `WarningMark`(`WarningMark.prefab` 또는 런타임 TMP 경고 텍스트)를 제어합니다.
+  - 경고 종료 후 장애물 인스턴스를 생성하고 `SetSourcePattern`, `ApplyVisualOverride`, `Initialize`를 호출하며, `StopSpawning()`으로 게임 오버 시 스폰과 활성 경고를 정리합니다.
+
+- **`MemeAttackObstacle`** (`Assets/Scripts/MemeAttackObstacle.cs`)
+  - `MemeSpawnType`(`Left`, `Right`, `Center`)에 따라 장애물 이동(좌/우 수평 대시, 중앙 하강 및 스케일 확대)과 화면 이탈 시 자동 파괴를 처리합니다.
+  - 원본 `MemePatternData` 참조(`SourcePattern`)를 보유하여 피격 시 탈락 주범 정보를 전달합니다.
+  - `SpriteRenderer`, `BoxCollider2D`(Trigger), `Rigidbody2D`(Kinematic)를 요구하며, 플레이어 충돌 감지 시 정적 이벤트 `OnPlayerHit` 및 `UnityEvent`를 발행합니다.
+
+- **`HitFeelController`** (`Assets/Scripts/HitFeelController.cs`)
+  - `Main Camera`에 부착되어 피격 연출을 담당합니다(미부착 시 `GameManager`가 `Camera.main`에서 탐색하거나 동적으로 부착).
+  - `PlayHitFeedback` 코루틴을 통해 히트스톱(`Time.timeScale = 0f` + `WaitForSecondsRealtime`) 후 `Time.unscaledDeltaTime` 기반 카메라 흔들림을 수행하며, 비활성화/파괴 시 `Time.timeScale` 및 카메라 위치를 원복(`RestoreState`)합니다.
+
+- **`ResultReportUI`** (`Assets/Scripts/UI/ResultReportUI.cs`)
+  - 게임 오버 시 **'2026 밈 능력 검정시험 성적통지표'** UI를 출력(`ShowReport`)합니다.
+  - 점수 기준에 따른 급수 판정(`불합격`, `3급`, `2급`, `1급`, `특급`), `PlayerPrefs`(`MemeLicense_BestScore`) 기반 최고 기록 갱신/표시, 탈락 주범 `MemePatternData`의 스프라이트/`memeTitle`/`failComment` 표시, 재도전 버튼(`retryButton` → `GameManager.RestartGame()`) 바인딩을 담당합니다.
+
+### 보조 시스템 스크립트
+- **`PlayerBoxController`** (`Assets/Scripts/PlayerBoxController.cs`): 2D 플레이어 좌우 이동(`A`/`D`)과 다단 점프(`W`/`Space`, `maxJumps`), `BoxCastAll` 기반 지면 판정, `SetInputEnabled(bool)`을 통한 게임 오버 시 입력 차단을 담당합니다.
+- **`AudioManager`** (`Assets/Scripts/AudioManager.cs`): 싱글톤(`AudioManager.Instance`, `DontDestroyOnLoad`)으로 BGM 및 공통 SFX(`PlayWarningSFX`, `PlayJumpSFX`, `PlayHitSFX`, `PlaySFX`) 재생을 담당합니다.
+- **`CameraFollow2D`** (`Assets/Scripts/CameraFollow2D.cs`): Orthographic 2D 카메라가 `target`을 지정된 `offset`으로 추적하도록 처리합니다.
+
+### 이벤트 및 데이터 흐름 요약
+1. `MemeAttackSpawner` → `MemePatternData` 선택 → 경고 연출(`WarningTrajectory` / `WarningMark`) → `MemeAttackObstacle` 스폰 및 `SourcePattern` 주입
+2. `MemeAttackObstacle` 플레이어 충돌 감지 → `MemeAttackObstacle.OnPlayerHit` 발행
+3. `GameManager` 수신 → HP 차감 및 `AudioManager.PlayHitSFX()`
+   - 생존 시: `HitFeelController.PlayHitFeedback()` 호출
+   - HP 0 시: `TriggerGameOver(sourcePattern)` → 입력 차단 & 스포너 중단 → `HitFeelController` 연출 → `Time.timeScale = 0f` → `ResultReportUI.ShowReport(...)` 출력
+
+---
+
+## 3. 절대 수정 금지 규칙 (Strict Rules)
+
+1. **직렬화된 Unity 에셋/씬/프리팹 수치 무단 수정 금지**
+   - 사용자가 명시적으로 요청하지 않는 한 `.unity`, `.prefab`, `.asset` 파일의 직렬화된 인스펙터 수치(`Transform`, `Scale`, `Speed`, `Position`, 컴포넌트 참조 연결 등)를 **절대 수정하지 마세요**.
+   - 코드 변경 시 기존 `[SerializeField]` 필드명을 임의로 변경하여 인스펙터 값이나 참조가 유실되지 않도록 주의하세요(불가피한 경우 `[FormerlySerializedAs]` 사용).
+
+2. **중복·불필요한 새 스크립트 임의 생성 금지**
+   - 새로운 스크립트를 만들기 전에 반드시 `Assets/Scripts/`의 기존 스크립트를 먼저 확인하세요.
+   - `GameManager`에 이미 체력/피격/게임오버 로직이 구현되어 있으므로 `PlayerHealth` 같은 중복·불필요한 새 스크립트를 임의로 생성하지 마세요.
+   - 기존 클래스의 책임 범위에 속하는 기능은 새 클래스를 난립시키지 말고 기존 아키텍처에 자연스럽게 확장하세요.
+
+3. **시간 정지(`Time.timeScale = 0f`) 환경 유의**
+   - 히트스톱(`HitFeelController`) 및 게임 오버 상태(`GameManager`)에서 `Time.timeScale = 0f`가 사용됩니다.
+   - 피격 연출이나 게임 오버 이후 실행되는 코루틴/애니메이션은 `WaitForSecondsRealtime`과 `Time.unscaledDeltaTime`을 사용해야 하며, 재시작 시 `Time.timeScale = 1f` 복원을 보장하세요.
