@@ -180,18 +180,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1d3f5a7c9e2b4068a1c3e5f7b9d0a2c4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MemeAttackObstacle
-  spriteRenderer: {fileID: 0}
-  obstacleCollider: {fileID: 0}
-  warningText: {fileID: 0}
+  spriteRenderer: {fileID: 8262317362795991111}
+  obstacleCollider: {fileID: 7235050016327654208}
+  warningText: {fileID: 8570027620679111315, guid: 835ed0ae7c186ea48bbf3bd704bdc1f3, type: 3}
   warningDuration: 0.6
   warningBlinkCount: 3
-  warningSpriteColor: {r: 1, g: 0.25, b: 0.25, a: 1}
-  warningMinAlpha: 0.15
-  warningMaxAlpha: 0.65
-  warningTextColor: {r: 1, g: 0.1, b: 0.1, a: 1}
-  warningTextMinAlpha: 0.15
-  warningTextMaxAlpha: 1
-  defaultWarningFontSize: 26
   horizontalDashSpeed: 18
   horizontalScale: 0.85
   offScreenLimitX: 15

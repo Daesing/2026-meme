@@ -7,12 +7,12 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public static class YahoSetupTool
+public static class MemeSetupTool
 {
     private const string PrefabDirectory = "Assets/Prefabs";
-    private const string PrefabPath = "Assets/Prefabs/YahoObstacle.prefab";
+    private const string DefaultPrefabPath = "Assets/Prefabs/YahoObstacle.prefab";
     private const string PatternDirectory = "Assets/Patterns";
-    private const string PatternPath = "Assets/Patterns/YahoPattern.asset";
+    private const string DefaultPatternPath = "Assets/Patterns/YahoPattern.asset";
     private const string DefaultFontPath = "Assets/Font/Recipekorea SDF.asset";
     private const string WarningMarkName = "WarningMark";
     private const float TargetPixelsPerUnit = 400f;
@@ -21,61 +21,74 @@ public static class YahoSetupTool
     private const int WarningBlinkCount = 3;
     private const float WarningFontSize = 26f;
 
-    [MenuItem("Tools/Setup Yaho Attack")]
-    public static void SetupYahoAttack()
+    [MenuItem("Tools/Meme Game/Setup Meme Attack")]
+    public static void SetupMemeAttack()
     {
+        bool confirmed = EditorUtility.DisplayDialog(
+            "Setup Meme Attack",
+            "기존 프리팹, 패턴 에셋 및 씬의 MemeAttackSpawner / AudioManager 세팅을 덮어쓰거나 갱신합니다.\n계속 진행하시겠습니까?",
+            "덮어쓰기 및 진행",
+            "취소"
+        );
+
+        if (!confirmed)
+        {
+            return;
+        }
+
         string[] spriteSearchFolders = GetSpriteSearchFolders();
 
-        string yahoTexturePath = FindAssetPathByName("t:Texture2D", "yaho", spriteSearchFolders);
-        if (string.IsNullOrEmpty(yahoTexturePath))
+        string texturePath = FindDefaultSpritePath(spriteSearchFolders);
+        if (string.IsNullOrEmpty(texturePath))
         {
             EditorUtility.DisplayDialog(
-                "Setup Yaho Attack",
-                "Assets/Sprites(또는 Assets/Sprite) 폴더에서 'yaho' 이미지 파일을 찾지 못했습니다.",
+                "Setup Meme Attack",
+                "Assets/Sprites(또는 Assets/Sprite) 폴더에서 사용할 이미지 파일을 찾지 못했습니다.",
                 "확인"
             );
             return;
         }
 
         string matPath = FindAssetPathByName("t:Material", "mat", spriteSearchFolders);
-        string audioPath = FindYahoAudioPath();
+        string audioPath = FindDefaultAudioPath();
 
-        ConfigureYahoTextureImporter(yahoTexturePath);
+        ConfigureSpriteTextureImporter(texturePath);
 
-        Sprite yahoSprite = LoadSpriteAtPath(yahoTexturePath);
-        if (yahoSprite == null)
+        Sprite obstacleSprite = LoadSpriteAtPath(texturePath);
+        if (obstacleSprite == null)
         {
-            Debug.LogError($"[YahoSetupTool] '{yahoTexturePath}'에서 Sprite를 불러오지 못했습니다.");
+            Debug.LogError($"[MemeSetupTool] '{texturePath}'에서 Sprite를 불러오지 못했습니다.");
             return;
         }
 
-        Material yahoMaterial = !string.IsNullOrEmpty(matPath)
+        Material obstacleMaterial = !string.IsNullOrEmpty(matPath)
             ? AssetDatabase.LoadAssetAtPath<Material>(matPath)
             : null;
 
-        if (yahoMaterial == null)
+        if (obstacleMaterial == null)
         {
-            Debug.LogWarning("[YahoSetupTool] 'mat' 머티리얼을 찾지 못해 기본 Sprite 머티리얼로 진행합니다.");
+            Debug.LogWarning("[MemeSetupTool] 'mat' 머티리얼을 찾지 못해 기본 Sprite 머티리얼로 진행합니다.");
         }
 
-        AudioClip yahoClip = !string.IsNullOrEmpty(audioPath)
+        AudioClip attackClip = !string.IsNullOrEmpty(audioPath)
             ? AssetDatabase.LoadAssetAtPath<AudioClip>(audioPath)
             : null;
 
-        if (yahoClip == null)
+        if (attackClip == null)
         {
-            Debug.LogWarning("[YahoSetupTool] Assets/Audio 폴더에서 yaho 효과음 클립을 찾지 못했습니다.");
+            Debug.LogWarning("[MemeSetupTool] Assets/Audio 폴더에서 효과음 클립을 찾지 못했습니다.");
         }
 
-        MemeAttackObstacle prefabComponent = CreateOrUpdateYahoPrefab(yahoSprite, yahoMaterial);
+        MemeAttackObstacle prefabComponent = CreateOrUpdateObstaclePrefab(obstacleSprite, obstacleMaterial);
         if (prefabComponent == null)
         {
-            Debug.LogError("[YahoSetupTool] YahoObstacle 프리팹 생성에 실패했습니다.");
+            Debug.LogError("[MemeSetupTool] MemeAttackObstacle 프리팹 생성에 실패했습니다.");
             return;
         }
 
-        MemePatternData yahoPattern = CreateOrUpdateYahoPattern(prefabComponent, yahoSprite, yahoMaterial, yahoClip);
-        MemeAttackSpawner spawner = SetupSceneSpawner(yahoPattern);
+        MemePatternData defaultPattern = CreateOrUpdateDefaultPattern(prefabComponent, obstacleSprite, obstacleMaterial, attackClip);
+        MemeAttackSpawner spawner = SetupSceneSpawner(defaultPattern);
+        AudioManager audioManager = SetupSceneAudioManager();
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
@@ -83,17 +96,18 @@ public static class YahoSetupTool
         if (spawner != null)
         {
             Selection.activeGameObject = spawner.gameObject;
-            EditorGUIUtility.PingObject(yahoPattern != null ? (UnityEngine.Object)yahoPattern : prefabComponent.gameObject);
+            EditorGUIUtility.PingObject(defaultPattern != null ? (UnityEngine.Object)defaultPattern : prefabComponent.gameObject);
         }
 
         Debug.Log(
-            $"[YahoSetupTool] 설정 완료!\n" +
-            $"- 이미지: {yahoTexturePath} (Sprite, PPU={TargetPixelsPerUnit})\n" +
-            $"- 머티리얼: {(yahoMaterial != null ? matPath : "기본값")}\n" +
-            $"- 효과음: {(yahoClip != null ? audioPath : "없음")}\n" +
-            $"- 프리팹: {PrefabPath} (경고용 '!' TextMeshPro 자식 포함)\n" +
-            $"- 패턴 에셋: {PatternPath}\n" +
-            $"- 씬 스포너: {(spawner != null ? $"{spawner.name} (MemeAttackSpawner, 패턴 등록 완료)" : "없음")}"
+            $"[MemeSetupTool] 설정 완료!\n" +
+            $"- 이미지: {texturePath} (Sprite, PPU={TargetPixelsPerUnit})\n" +
+            $"- 머티리얼: {(obstacleMaterial != null ? matPath : "기본값")}\n" +
+            $"- 효과음: {(attackClip != null ? audioPath : "없음")}\n" +
+            $"- 프리팹: {DefaultPrefabPath} (MemeAttackObstacle + 경고용 '!' TextMeshPro 자식 포함)\n" +
+            $"- 패턴 에셋: {DefaultPatternPath}\n" +
+            $"- 씬 스포너: {(spawner != null ? $"{spawner.name} (MemeAttackSpawner, 패턴 등록 완료)" : "없음")}\n" +
+            $"- 오디오 매니저: {(audioManager != null ? $"{audioManager.name} (AudioManager 확인 완료)" : "없음")}"
         );
     }
 
@@ -111,7 +125,24 @@ public static class YahoSetupTool
         return folders.Count > 0 ? folders.ToArray() : new[] { "Assets" };
     }
 
-    private static string FindYahoAudioPath()
+    private static string FindDefaultSpritePath(string[] spriteSearchFolders)
+    {
+        string matched = FindAssetPathByName("t:Texture2D", "yaho", spriteSearchFolders);
+        if (!string.IsNullOrEmpty(matched))
+        {
+            return matched;
+        }
+
+        string[] allTextures = AssetDatabase.FindAssets("t:Texture2D", spriteSearchFolders);
+        if (allTextures.Length > 0)
+        {
+            return AssetDatabase.GUIDToAssetPath(allTextures[0]);
+        }
+
+        return null;
+    }
+
+    private static string FindDefaultAudioPath()
     {
         string[] audioFolders = AssetDatabase.IsValidFolder("Assets/Audio")
             ? new[] { "Assets/Audio" }
@@ -165,12 +196,12 @@ public static class YahoSetupTool
         return exactMatch ?? containsMatch;
     }
 
-    private static void ConfigureYahoTextureImporter(string texturePath)
+    private static void ConfigureSpriteTextureImporter(string texturePath)
     {
         TextureImporter importer = AssetImporter.GetAtPath(texturePath) as TextureImporter;
         if (importer == null)
         {
-            Debug.LogWarning($"[YahoSetupTool] TextureImporter를 가져올 수 없습니다: {texturePath}");
+            Debug.LogWarning($"[MemeSetupTool] TextureImporter를 가져올 수 없습니다: {texturePath}");
             return;
         }
 
@@ -207,32 +238,33 @@ public static class YahoSetupTool
             .FirstOrDefault();
     }
 
-    private static MemeAttackObstacle CreateOrUpdateYahoPrefab(Sprite yahoSprite, Material yahoMaterial)
+    private static MemeAttackObstacle CreateOrUpdateObstaclePrefab(Sprite obstacleSprite, Material obstacleMaterial)
     {
         if (!AssetDatabase.IsValidFolder(PrefabDirectory))
         {
             AssetDatabase.CreateFolder("Assets", "Prefabs");
         }
 
-        GameObject root = new GameObject("YahoObstacle");
+        string prefabName = Path.GetFileNameWithoutExtension(DefaultPrefabPath);
+        GameObject root = new GameObject(prefabName);
         try
         {
             SpriteRenderer sr = root.AddComponent<SpriteRenderer>();
-            sr.sprite = yahoSprite;
+            sr.sprite = obstacleSprite;
             sr.sortingOrder = 15;
-            if (yahoMaterial != null)
+            if (obstacleMaterial != null)
             {
-                sr.sharedMaterial = yahoMaterial;
+                sr.sharedMaterial = obstacleMaterial;
             }
 
             BoxCollider2D boxCollider = root.AddComponent<BoxCollider2D>();
             boxCollider.isTrigger = true;
-            Vector2 spriteSize = yahoSprite.bounds.size;
+            Vector2 spriteSize = obstacleSprite.bounds.size;
             boxCollider.size = new Vector2(
                 Mathf.Max(0.5f, spriteSize.x * HitboxScale),
                 Mathf.Max(0.5f, spriteSize.y * HitboxScale)
             );
-            boxCollider.offset = yahoSprite.bounds.center;
+            boxCollider.offset = obstacleSprite.bounds.center;
 
             Rigidbody2D rb = root.AddComponent<Rigidbody2D>();
             rb.bodyType = RigidbodyType2D.Kinematic;
@@ -249,7 +281,7 @@ public static class YahoSetupTool
             serializedObstacle.FindProperty("warningBlinkCount").intValue = WarningBlinkCount;
             serializedObstacle.ApplyModifiedPropertiesWithoutUndo();
 
-            GameObject savedPrefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
+            GameObject savedPrefab = PrefabUtility.SaveAsPrefabAsset(root, DefaultPrefabPath);
             return savedPrefab != null ? savedPrefab.GetComponent<MemeAttackObstacle>() : null;
         }
         finally
@@ -304,28 +336,28 @@ public static class YahoSetupTool
         return TMP_Settings.defaultFontAsset;
     }
 
-    private static MemePatternData CreateOrUpdateYahoPattern(
+    private static MemePatternData CreateOrUpdateDefaultPattern(
         MemeAttackObstacle prefabComponent,
-        Sprite yahoSprite,
-        Material yahoMaterial,
-        AudioClip yahoClip)
+        Sprite obstacleSprite,
+        Material obstacleMaterial,
+        AudioClip attackClip)
     {
         if (!AssetDatabase.IsValidFolder(PatternDirectory))
         {
             AssetDatabase.CreateFolder("Assets", "Patterns");
         }
 
-        MemePatternData pattern = AssetDatabase.LoadAssetAtPath<MemePatternData>(PatternPath);
+        MemePatternData pattern = AssetDatabase.LoadAssetAtPath<MemePatternData>(DefaultPatternPath);
         if (pattern == null)
         {
             pattern = ScriptableObject.CreateInstance<MemePatternData>();
-            AssetDatabase.CreateAsset(pattern, PatternPath);
+            AssetDatabase.CreateAsset(pattern, DefaultPatternPath);
         }
 
         pattern.obstaclePrefab = prefabComponent;
-        pattern.overrideSprite = yahoSprite;
-        pattern.overrideMaterial = yahoMaterial;
-        pattern.attackSfx = yahoClip;
+        pattern.overrideSprite = obstacleSprite;
+        pattern.overrideMaterial = obstacleMaterial;
+        pattern.attackSfx = attackClip;
         pattern.soundVolume = 1f;
         pattern.spawnWeight = 1f;
         pattern.allowLeft = true;
@@ -336,29 +368,14 @@ public static class YahoSetupTool
         return pattern;
     }
 
-    private static MemeAttackSpawner SetupSceneSpawner(MemePatternData yahoPattern)
+    private static MemeAttackSpawner SetupSceneSpawner(MemePatternData defaultPattern)
     {
         MemeAttackSpawner spawner = UnityEngine.Object.FindAnyObjectByType<MemeAttackSpawner>();
         if (spawner == null)
         {
-            GameObject legacySpawnerObj = GameObject.Find("YahoAttackSpawner");
-            if (legacySpawnerObj != null)
-            {
-                Undo.RegisterCompleteObjectUndo(legacySpawnerObj, "Convert YahoAttackSpawner to MemeAttackSpawner");
-                GameObjectUtility.RemoveMonoBehavioursWithMissingScript(legacySpawnerObj);
-                legacySpawnerObj.name = "MemeAttackSpawner";
-                spawner = legacySpawnerObj.GetComponent<MemeAttackSpawner>();
-                if (spawner == null)
-                {
-                    spawner = Undo.AddComponent<MemeAttackSpawner>(legacySpawnerObj);
-                }
-            }
-            else
-            {
-                GameObject spawnerObj = new GameObject("MemeAttackSpawner");
-                spawner = spawnerObj.AddComponent<MemeAttackSpawner>();
-                Undo.RegisterCreatedObjectUndo(spawnerObj, "Create MemeAttackSpawner");
-            }
+            GameObject spawnerObj = new GameObject("MemeAttackSpawner");
+            spawner = spawnerObj.AddComponent<MemeAttackSpawner>();
+            Undo.RegisterCreatedObjectUndo(spawnerObj, "Create MemeAttackSpawner");
         }
 
         SerializedObject serializedSpawner = new SerializedObject(spawner);
@@ -371,17 +388,37 @@ public static class YahoSetupTool
         {
             patternsProp.InsertArrayElementAtIndex(0);
         }
-        patternsProp.GetArrayElementAtIndex(0).objectReferenceValue = yahoPattern;
+        patternsProp.GetArrayElementAtIndex(0).objectReferenceValue = defaultPattern;
 
         serializedSpawner.ApplyModifiedProperties();
 
         EditorUtility.SetDirty(spawner);
+        MarkActiveSceneDirty();
+
+        return spawner;
+    }
+
+    private static AudioManager SetupSceneAudioManager()
+    {
+        AudioManager audioManager = UnityEngine.Object.FindAnyObjectByType<AudioManager>();
+        if (audioManager == null)
+        {
+            GameObject audioObj = new GameObject("AudioManager");
+            audioManager = audioObj.AddComponent<AudioManager>();
+            Undo.RegisterCreatedObjectUndo(audioObj, "Create AudioManager");
+            EditorUtility.SetDirty(audioManager);
+            MarkActiveSceneDirty();
+        }
+
+        return audioManager;
+    }
+
+    private static void MarkActiveSceneDirty()
+    {
         Scene activeScene = SceneManager.GetActiveScene();
         if (activeScene.IsValid())
         {
             EditorSceneManager.MarkSceneDirty(activeScene);
         }
-
-        return spawner;
     }
 }

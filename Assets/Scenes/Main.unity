@@ -401,31 +401,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MemeAttackSpawner
   orderMode: 0
-  memeAttacks:
-  - obstaclePrefab: {fileID: 7700684619889786532, guid: efb99c3e86fe59247b81d25beef70832, type: 3}
-    overrideSprite: {fileID: 0}
-    overrideMaterial: {fileID: 0}
-    attackSfx: {fileID: 8300000, guid: 6728b08447e0f754cb9d1a98a3876ceb, type: 3}
-    soundVolume: 1
-    spawnWeight: 1
-    allowLeft: 1
-    allowRight: 1
-    allowCenter: 1
-    useCustomPosition: 0
-    customObstacleSpawnPos: {x: 0, y: 0}
-    customWarningSpawnPos: {x: 0, y: 0}
-  - obstaclePrefab: {fileID: 7803701249840195810, guid: f944aa2a2778b7c44ae5577b63a5bb1a, type: 3}
-    overrideSprite: {fileID: 0}
-    overrideMaterial: {fileID: 0}
-    attackSfx: {fileID: 0}
-    soundVolume: 1
-    spawnWeight: 1
-    allowLeft: 1
-    allowRight: 1
-    allowCenter: 1
-    useCustomPosition: 0
-    customObstacleSpawnPos: {x: 0, y: 0}
-    customWarningSpawnPos: {x: 0, y: 0}
+  patterns:
+  - {fileID: 11400000, guid: c79c58fca86443843ac5e6bd9e637eff, type: 2}
   initialDelay: 1.5
   warningDuration: 1
   repeatSpawn: 1

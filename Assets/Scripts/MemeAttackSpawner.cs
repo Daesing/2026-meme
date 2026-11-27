@@ -52,7 +52,7 @@ public class MemeAttackSpawner : MonoBehaviour
 
     private readonly List<int> shuffleBag = new List<int>();
     private readonly List<int> validIndicesBuffer = new List<int>();
-    private readonly List<YahoSpawnType> allowedSpawnTypesBuffer = new List<YahoSpawnType>(3);
+    private readonly List<MemeSpawnType> allowedSpawnTypesBuffer = new List<MemeSpawnType>(3);
 
     private Coroutine spawnRoutine;
     private GameObject activeWarningObject;
@@ -71,7 +71,7 @@ public class MemeAttackSpawner : MonoBehaviour
     {
         if (!HasValidPattern())
         {
-            Debug.LogWarning("[MemeAttackSpawner] 등록된 유효한 MemePatternData가 없습니다. 프로젝트 창에서 MemeGame/Meme Pattern 에셋을 생성해 등록하거나 'Tools/Setup Yaho Attack'을 실행해 주세요.");
+            Debug.LogWarning("[MemeAttackSpawner] 등록된 유효한 MemePatternData가 없습니다. 프로젝트 창에서 MemeGame/Meme Pattern 에셋을 생성해 등록하거나 'Tools/Meme Game/Setup Meme Attack'을 실행해 주세요.");
             return;
         }
 
@@ -95,11 +95,11 @@ public class MemeAttackSpawner : MonoBehaviour
         }
 
         MemePatternData pattern = patterns[nextIndex];
-        YahoSpawnType spawnType = PickSpawnType(pattern);
+        MemeSpawnType spawnType = PickSpawnType(pattern);
         StartSingleAttack(pattern, spawnType);
     }
 
-    public void SpawnAttack(int index, YahoSpawnType? forcedSpawnType = null)
+    public void SpawnAttack(int index, MemeSpawnType? forcedSpawnType = null)
     {
         if (!IsValidPatternIndex(index))
         {
@@ -109,7 +109,7 @@ public class MemeAttackSpawner : MonoBehaviour
 
         lastSpawnedIndex = index;
         MemePatternData pattern = patterns[index];
-        YahoSpawnType spawnType = forcedSpawnType ?? PickSpawnType(pattern);
+        MemeSpawnType spawnType = forcedSpawnType ?? PickSpawnType(pattern);
         StartSingleAttack(pattern, spawnType);
     }
 
@@ -123,7 +123,7 @@ public class MemeAttackSpawner : MonoBehaviour
         ClearActiveWarning();
     }
 
-    private void StartSingleAttack(MemePatternData pattern, YahoSpawnType spawnType)
+    private void StartSingleAttack(MemePatternData pattern, MemeSpawnType spawnType)
     {
         if (spawnRoutine != null)
         {
@@ -151,7 +151,7 @@ public class MemeAttackSpawner : MonoBehaviour
             }
 
             MemePatternData pattern = patterns[nextIndex];
-            YahoSpawnType spawnType = PickSpawnType(pattern);
+            MemeSpawnType spawnType = PickSpawnType(pattern);
             yield return PlayMemeAttackSequence(pattern, spawnType);
 
             if (repeatSpawn && spawnInterval > 0f)
@@ -164,7 +164,7 @@ public class MemeAttackSpawner : MonoBehaviour
         spawnRoutine = null;
     }
 
-    private IEnumerator PlayMemeAttackSequence(MemePatternData pattern, YahoSpawnType spawnType)
+    private IEnumerator PlayMemeAttackSequence(MemePatternData pattern, MemeSpawnType spawnType)
     {
         ResolvePositions(pattern, spawnType, out Vector3 spawnPos, out Vector3 warningPos);
         float effectiveWarningDuration = GetEffectiveWarningDuration(pattern.obstaclePrefab);
@@ -210,6 +210,11 @@ public class MemeAttackSpawner : MonoBehaviour
         if (warningPrefab != null)
         {
             activeWarningObject = Instantiate(warningPrefab, warningPos, Quaternion.identity);
+            if (!activeWarningObject.activeSelf)
+            {
+                activeWarningObject.SetActive(true);
+            }
+            activeWarningObject.transform.position = warningPos;
             yield return new WaitForSeconds(duration);
             ClearActiveWarning();
             yield break;
@@ -393,16 +398,16 @@ public class MemeAttackSpawner : MonoBehaviour
         return selectedIndex;
     }
 
-    private YahoSpawnType PickSpawnType(MemePatternData pattern)
+    private MemeSpawnType PickSpawnType(MemePatternData pattern)
     {
         allowedSpawnTypesBuffer.Clear();
-        if (pattern.allowLeft) allowedSpawnTypesBuffer.Add(YahoSpawnType.Left);
-        if (pattern.allowRight) allowedSpawnTypesBuffer.Add(YahoSpawnType.Right);
-        if (pattern.allowCenter) allowedSpawnTypesBuffer.Add(YahoSpawnType.Center);
+        if (pattern.allowLeft) allowedSpawnTypesBuffer.Add(MemeSpawnType.Left);
+        if (pattern.allowRight) allowedSpawnTypesBuffer.Add(MemeSpawnType.Right);
+        if (pattern.allowCenter) allowedSpawnTypesBuffer.Add(MemeSpawnType.Center);
 
         if (allowedSpawnTypesBuffer.Count == 0)
         {
-            return (YahoSpawnType)Random.Range(0, 3);
+            return (MemeSpawnType)Random.Range(0, 3);
         }
 
         int pick = Random.Range(0, allowedSpawnTypesBuffer.Count);
@@ -453,7 +458,7 @@ public class MemeAttackSpawner : MonoBehaviour
             && patterns[index].obstaclePrefab != null;
     }
 
-    private void ResolvePositions(MemePatternData pattern, YahoSpawnType spawnType, out Vector3 spawnPos, out Vector3 warningPos)
+    private void ResolvePositions(MemePatternData pattern, MemeSpawnType spawnType, out Vector3 spawnPos, out Vector3 warningPos)
     {
         if (pattern != null && pattern.useCustomPosition)
         {
@@ -465,11 +470,11 @@ public class MemeAttackSpawner : MonoBehaviour
         ResolveDefaultPositions(spawnType, out spawnPos, out warningPos);
     }
 
-    private void ResolveDefaultPositions(YahoSpawnType spawnType, out Vector3 spawnPos, out Vector3 warningPos)
+    private void ResolveDefaultPositions(MemeSpawnType spawnType, out Vector3 spawnPos, out Vector3 warningPos)
     {
         switch (spawnType)
         {
-            case YahoSpawnType.Left:
+            case MemeSpawnType.Left:
             {
                 float spawnY = Random.Range(horizontalMinY, horizontalMaxY);
                 spawnPos = new Vector3(leftSpawnX, spawnY, 0f);
@@ -477,7 +482,7 @@ public class MemeAttackSpawner : MonoBehaviour
                 break;
             }
 
-            case YahoSpawnType.Right:
+            case MemeSpawnType.Right:
             {
                 float spawnY = Random.Range(horizontalMinY, horizontalMaxY);
                 spawnPos = new Vector3(rightSpawnX, spawnY, 0f);
@@ -485,7 +490,7 @@ public class MemeAttackSpawner : MonoBehaviour
                 break;
             }
 
-            case YahoSpawnType.Center:
+            case MemeSpawnType.Center:
             {
                 float offsetX = centerRandomOffsetX > 0f
                     ? Random.Range(-centerRandomOffsetX, centerRandomOffsetX)

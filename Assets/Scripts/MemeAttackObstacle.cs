@@ -3,7 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
 
-public enum YahoSpawnType
+public enum MemeSpawnType
 {
     Left,
     Right,
@@ -44,7 +44,7 @@ public class MemeAttackObstacle : MonoBehaviour
     [SerializeField] private UnityEvent onPlayerHit = new UnityEvent();
 
     private Rigidbody2D rb;
-    private YahoSpawnType spawnType = YahoSpawnType.Left;
+    private MemeSpawnType spawnType = MemeSpawnType.Left;
     private float activeMoveSpeed = 10f;
     private Color baseColor = Color.white;
     private bool baseColorCached;
@@ -52,7 +52,7 @@ public class MemeAttackObstacle : MonoBehaviour
     private bool isAttacking;
     private bool hasHitPlayer;
 
-    public YahoSpawnType SpawnType => spawnType;
+    public MemeSpawnType SpawnType => spawnType;
     public float ActiveMoveSpeed => activeMoveSpeed;
     public bool IsAttacking => isAttacking;
     public float WarningDuration => warningDuration;
@@ -90,13 +90,13 @@ public class MemeAttackObstacle : MonoBehaviour
         }
     }
 
-    public void Initialize(YahoSpawnType type, Action onAttackBegin = null)
+    public void Initialize(MemeSpawnType type, Action onAttackBegin = null)
     {
-        float defaultSpeed = type == YahoSpawnType.Center ? centerDownSpeed : horizontalDashSpeed;
+        float defaultSpeed = type == MemeSpawnType.Center ? centerDownSpeed : horizontalDashSpeed;
         Initialize(type, defaultSpeed, onAttackBegin);
     }
 
-    public void Initialize(YahoSpawnType type, float moveSpeed, Action onAttackBegin = null)
+    public void Initialize(MemeSpawnType type, float moveSpeed, Action onAttackBegin = null)
     {
         EnsureComponents();
 
@@ -106,9 +106,9 @@ public class MemeAttackObstacle : MonoBehaviour
         isAttacking = false;
         hasHitPlayer = false;
 
-        spriteRenderer.flipX = spawnType == YahoSpawnType.Right;
+        spriteRenderer.flipX = spawnType == MemeSpawnType.Right;
 
-        if (spawnType == YahoSpawnType.Center)
+        if (spawnType == MemeSpawnType.Center)
         {
             transform.localScale = Vector3.one * centerStartScale;
         }
@@ -160,7 +160,7 @@ public class MemeAttackObstacle : MonoBehaviour
 
         switch (spawnType)
         {
-            case YahoSpawnType.Left:
+            case MemeSpawnType.Left:
                 pos.x += activeMoveSpeed * Time.deltaTime;
                 transform.position = pos;
                 if (pos.x > offScreenLimitX)
@@ -169,7 +169,7 @@ public class MemeAttackObstacle : MonoBehaviour
                 }
                 break;
 
-            case YahoSpawnType.Right:
+            case MemeSpawnType.Right:
                 pos.x -= activeMoveSpeed * Time.deltaTime;
                 transform.position = pos;
                 if (pos.x < -offScreenLimitX)
@@ -178,7 +178,7 @@ public class MemeAttackObstacle : MonoBehaviour
                 }
                 break;
 
-            case YahoSpawnType.Center:
+            case MemeSpawnType.Center:
                 pos.y -= activeMoveSpeed * Time.deltaTime;
                 transform.position = pos;
 

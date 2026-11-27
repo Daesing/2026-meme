@@ -39,13 +39,13 @@ public class GameManager : MonoBehaviour
     private void OnEnable()
     {
         SubtitleObstacle.OnPlayerHit += HandleSubtitleHit;
-        MemeAttackObstacle.OnPlayerHit += HandleYahoHit;
+        MemeAttackObstacle.OnPlayerHit += HandleMemeAttackHit;
     }
 
     private void OnDisable()
     {
         SubtitleObstacle.OnPlayerHit -= HandleSubtitleHit;
-        MemeAttackObstacle.OnPlayerHit -= HandleYahoHit;
+        MemeAttackObstacle.OnPlayerHit -= HandleMemeAttackHit;
     }
 
     private void OnDestroy()
@@ -83,7 +83,7 @@ public class GameManager : MonoBehaviour
         ApplyPlayerDamage(1);
     }
 
-    private void HandleYahoHit(MemeAttackObstacle obstacle)
+    private void HandleMemeAttackHit(MemeAttackObstacle obstacle)
     {
         ApplyPlayerDamage(1);
     }
