@@ -29,3 +29,5 @@ MonoBehaviour:
   useCustomPosition: 0
   customObstacleSpawnPos: {x: 0, y: 0}
   customWarningSpawnPos: {x: 0, y: 0}
+  memeTitle: "\uAC70\uC81C \uC57C\uD638"
+  failComment: "\uB974\uC13C\uB290\uB3C4 \uBAA8\uB974\uB294 \uB299\uD06C\uD06C..."
