@@ -329,19 +329,8 @@ public static class YahoSetupTool
             }
         }
 
-        AudioSource audioSource = spawner.GetComponent<AudioSource>();
-        if (audioSource == null)
-        {
-            audioSource = Undo.AddComponent<AudioSource>(spawner.gameObject);
-        }
-        audioSource.playOnAwake = false;
-        audioSource.loop = false;
-        audioSource.spatialBlend = 0f;
-        EditorUtility.SetDirty(audioSource);
-
         SerializedObject serializedSpawner = new SerializedObject(spawner);
         serializedSpawner.FindProperty("orderMode").enumValueIndex = (int)MemeOrderMode.ShuffleBag;
-        serializedSpawner.FindProperty("audioSource").objectReferenceValue = audioSource;
         serializedSpawner.FindProperty("warningDuration").floatValue = WarningDuration;
         serializedSpawner.FindProperty("repeatSpawn").boolValue = false;
 
@@ -355,7 +344,7 @@ public static class YahoSetupTool
         firstEntry.FindPropertyRelative("obstaclePrefab").objectReferenceValue = prefabComponent;
         firstEntry.FindPropertyRelative("overrideSprite").objectReferenceValue = yahoSprite;
         firstEntry.FindPropertyRelative("overrideMaterial").objectReferenceValue = yahoMaterial;
-        firstEntry.FindPropertyRelative("attackSound").objectReferenceValue = yahoClip;
+        firstEntry.FindPropertyRelative("attackSfx").objectReferenceValue = yahoClip;
         firstEntry.FindPropertyRelative("soundVolume").floatValue = 1f;
         firstEntry.FindPropertyRelative("spawnWeight").floatValue = 1f;
         firstEntry.FindPropertyRelative("allowLeft").boolValue = true;

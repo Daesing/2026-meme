@@ -267,8 +267,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 503906690}
-  - component: {fileID: 503906691}
   - component: {fileID: 503906692}
+  - component: {fileID: 503906691}
   m_Layer: 0
   m_Name: MemeAttackSpawner
   m_TagString: Untagged
@@ -405,19 +405,7 @@ MonoBehaviour:
   - obstaclePrefab: {fileID: 7700684619889786532, guid: efb99c3e86fe59247b81d25beef70832, type: 3}
     overrideSprite: {fileID: 0}
     overrideMaterial: {fileID: 0}
-    attackSound: {fileID: 8300000, guid: 6728b08447e0f754cb9d1a98a3876ceb, type: 3}
-    soundVolume: 1
-    spawnWeight: 1
-    allowLeft: 0
-    allowRight: 1
-    allowCenter: 0
-    useCustomPosition: 0
-    customObstacleSpawnPos: {x: 0, y: 0}
-    customWarningSpawnPos: {x: 0, y: 0}
-  - obstaclePrefab: {fileID: 7803701249840195810, guid: f944aa2a2778b7c44ae5577b63a5bb1a, type: 3}
-    overrideSprite: {fileID: 0}
-    overrideMaterial: {fileID: 0}
-    attackSound: {fileID: 0}
+    attackSfx: {fileID: 8300000, guid: 6728b08447e0f754cb9d1a98a3876ceb, type: 3}
     soundVolume: 1
     spawnWeight: 1
     allowLeft: 1
@@ -426,7 +414,18 @@ MonoBehaviour:
     useCustomPosition: 0
     customObstacleSpawnPos: {x: 0, y: 0}
     customWarningSpawnPos: {x: 0, y: 0}
-  audioSource: {fileID: 503906691}
+  - obstaclePrefab: {fileID: 7803701249840195810, guid: f944aa2a2778b7c44ae5577b63a5bb1a, type: 3}
+    overrideSprite: {fileID: 0}
+    overrideMaterial: {fileID: 0}
+    attackSfx: {fileID: 0}
+    soundVolume: 1
+    spawnWeight: 1
+    allowLeft: 1
+    allowRight: 1
+    allowCenter: 1
+    useCustomPosition: 0
+    customObstacleSpawnPos: {x: 0, y: 0}
+    customWarningSpawnPos: {x: 0, y: 0}
   initialDelay: 1.5
   warningDuration: 1
   repeatSpawn: 1
@@ -1210,6 +1209,59 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1409609947
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1409609949}
+  - component: {fileID: 1409609948}
+  m_Layer: 0
+  m_Name: AudioManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1409609948
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1409609947}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a056a87c42b11c341bc5254e9fdfa288, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AudioManager
+  dontDestroyOnLoad: 1
+  bgmSource: {fileID: 0}
+  sfxSource: {fileID: 0}
+  mainBgm: {fileID: 0}
+  bgmVolume: 1
+  warningSfx: {fileID: 0}
+  jumpSfx: {fileID: 0}
+  hitSfx: {fileID: 0}
+  sfxVolume: 1
+--- !u!4 &1409609949
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1409609947}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.06309, y: 0.83375, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1445919868
 GameObject:
   m_ObjectHideFlags: 0
@@ -1270,4 +1322,5 @@ SceneRoots:
   - {fileID: 102368383}
   - {fileID: 503906690}
   - {fileID: 1445919870}
+  - {fileID: 1409609949}
   - {fileID: 1300000002}

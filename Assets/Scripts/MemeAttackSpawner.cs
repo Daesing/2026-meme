@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public enum MemeOrderMode
 {
@@ -17,7 +18,8 @@ public class MemeAttackData
     public MemeAttackObstacle obstaclePrefab;
     public Sprite overrideSprite;
     public Material overrideMaterial;
-    public AudioClip attackSound;
+    [FormerlySerializedAs("attackSound")]
+    public AudioClip attackSfx;
     [Range(0f, 1f)] public float soundVolume = 1f;
     [Min(0.01f)] public float spawnWeight = 1f;
     public bool allowLeft = true;
@@ -31,15 +33,11 @@ public class MemeAttackData
     public Vector2 customWarningSpawnPos;
 }
 
-[RequireComponent(typeof(AudioSource))]
 public class MemeAttackSpawner : MonoBehaviour
 {
     [Header("Meme Attacks")]
     [SerializeField] private MemeOrderMode orderMode = MemeOrderMode.ShuffleBag;
     [SerializeField] private List<MemeAttackData> memeAttacks = new List<MemeAttackData>();
-
-    [Header("Audio")]
-    [SerializeField] private AudioSource audioSource = null;
 
     [Header("Timing")]
     [SerializeField] private float initialDelay = 1.5f;
@@ -91,11 +89,6 @@ public class MemeAttackSpawner : MonoBehaviour
     }
 
     public IReadOnlyList<MemeAttackData> MemeAttacks => memeAttacks;
-
-    private void Awake()
-    {
-        EnsureAudioSource();
-    }
 
     private void Start()
     {
@@ -196,8 +189,6 @@ public class MemeAttackSpawner : MonoBehaviour
 
     private IEnumerator PlayMemeAttackSequence(MemeAttackData data, YahoSpawnType spawnType)
     {
-        EnsureAudioSource();
-
         ResolvePositions(data, spawnType, out Vector3 spawnPos, out Vector3 warningPos);
         float effectiveWarningDuration = GetEffectiveWarningDuration(data.obstaclePrefab);
 
@@ -209,12 +200,12 @@ public class MemeAttackSpawner : MonoBehaviour
         MemeAttackObstacle instance = Instantiate(data.obstaclePrefab, spawnPos, Quaternion.identity);
         instance.ApplyVisualOverride(data.overrideSprite, data.overrideMaterial);
 
-        AudioClip clip = data.attackSound;
+        AudioClip attackSfx = data.attackSfx;
         float volume = data.soundVolume;
 
         instance.Initialize(
             spawnType,
-            onAttackBegin: () => PlayAttackSound(clip, volume)
+            onAttackBegin: () => AudioManager.Instance?.PlaySFX(attackSfx, volume)
         );
     }
 
@@ -236,6 +227,7 @@ public class MemeAttackSpawner : MonoBehaviour
     private IEnumerator ShowWarningRoutine(Vector3 warningPos, float duration, MemeAttackObstacle obstaclePrefab)
     {
         ClearActiveWarning();
+        AudioManager.Instance?.PlayWarningSFX();
 
         if (warningPrefab != null)
         {
@@ -470,37 +462,6 @@ public class MemeAttackSpawner : MonoBehaviour
             && index < memeAttacks.Count
             && memeAttacks[index] != null
             && memeAttacks[index].obstaclePrefab != null;
-    }
-
-    private void PlayAttackSound(AudioClip clip, float volume)
-    {
-        if (this == null || clip == null)
-        {
-            return;
-        }
-
-        EnsureAudioSource();
-
-        if (audioSource != null)
-        {
-            audioSource.PlayOneShot(clip, Mathf.Clamp01(volume));
-        }
-    }
-
-    private void EnsureAudioSource()
-    {
-        if (audioSource == null)
-        {
-            audioSource = GetComponent<AudioSource>();
-            if (audioSource == null)
-            {
-                audioSource = gameObject.AddComponent<AudioSource>();
-            }
-        }
-
-        audioSource.playOnAwake = false;
-        audioSource.loop = false;
-        audioSource.spatialBlend = 0f;
     }
 
     private void ResolvePositions(MemeAttackData data, YahoSpawnType spawnType, out Vector3 spawnPos, out Vector3 warningPos)
