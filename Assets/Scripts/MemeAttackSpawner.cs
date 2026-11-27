@@ -27,6 +27,8 @@ public class MemeAttackSpawner : MonoBehaviour
     [Header("Warning Indicator")]
     [Tooltip("비워 두면 기본 '!' 경고 텍스트를 런타임에 생성해 깜빡입니다.")]
     [SerializeField] private GameObject warningPrefab = null;
+    [Tooltip("궤적 경고(Trajectory / Both)에 사용할 반투명 띠 프리팹")]
+    [SerializeField] private GameObject trajectoryWarningPrefab = null;
     [Tooltip("Left 스폰 시 경고(!)가 표시될 X 월드 좌표")]
     [SerializeField] private float leftWarningX = -3.5f;
     [Tooltip("Right 스폰 시 경고(!)가 표시될 X 월드 좌표")]
@@ -50,14 +52,42 @@ public class MemeAttackSpawner : MonoBehaviour
     [SerializeField] private Vector2 centerSpawnPosition = new Vector2(0f, 2.2f);
     [SerializeField, Min(0f)] private float centerRandomOffsetX = 1.2f;
 
+    private const string DefaultTrajectoryWarningPrefabPath = "Assets/Prefabs/WarningTrajectory.prefab";
+    private const float TrajectoryLength = 25f;
+    private const float TrajectoryDimAlpha = 0.05f;
+    private const float ExclamationDimAlpha = 0.1f;
+    private const int DefaultTrajectorySortingOrder = 15;
+
     private readonly List<int> shuffleBag = new List<int>();
     private readonly List<int> validIndicesBuffer = new List<int>();
     private readonly List<MemeSpawnType> allowedSpawnTypesBuffer = new List<MemeSpawnType>(3);
 
     private Coroutine spawnRoutine;
     private GameObject activeWarningObject;
+    private GameObject activeTrajectoryWarningObject;
+    private static Sprite fallbackSquareSprite;
     private int sequentialCursor;
     private int lastSpawnedIndex = -1;
+
+#if UNITY_EDITOR
+    private void Reset()
+    {
+        AutoAssignTrajectoryWarningPrefab();
+    }
+
+    private void OnValidate()
+    {
+        AutoAssignTrajectoryWarningPrefab();
+    }
+
+    private void AutoAssignTrajectoryWarningPrefab()
+    {
+        if (trajectoryWarningPrefab == null)
+        {
+            trajectoryWarningPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(DefaultTrajectoryWarningPrefabPath);
+        }
+    }
+#endif
 
     public MemeOrderMode OrderMode
     {
@@ -171,7 +201,7 @@ public class MemeAttackSpawner : MonoBehaviour
 
         if (effectiveWarningDuration > 0f)
         {
-            yield return ShowWarningRoutine(warningPos, effectiveWarningDuration, pattern.obstaclePrefab);
+            yield return ShowWarningRoutine(pattern, spawnType, spawnPos, warningPos, effectiveWarningDuration);
         }
 
         MemeAttackObstacle instance = Instantiate(pattern.obstaclePrefab, spawnPos, Quaternion.identity);
@@ -202,40 +232,71 @@ public class MemeAttackSpawner : MonoBehaviour
         return 0f;
     }
 
-    private IEnumerator ShowWarningRoutine(Vector3 warningPos, float duration, MemeAttackObstacle obstaclePrefab)
+    private IEnumerator ShowWarningRoutine(
+        MemePatternData pattern,
+        MemeSpawnType spawnType,
+        Vector3 spawnPos,
+        Vector3 warningPos,
+        float duration)
     {
         ClearActiveWarning();
         AudioManager.Instance?.PlayWarningSFX();
 
-        if (warningPrefab != null)
+        WarningStyle warningStyle = pattern != null ? pattern.warningStyle : WarningStyle.Trajectory;
+        bool showExclamation = warningStyle == WarningStyle.Exclamation || warningStyle == WarningStyle.Both;
+        bool showTrajectory = warningStyle == WarningStyle.Trajectory || warningStyle == WarningStyle.Both;
+
+        TMP_Text[] warningTexts = null;
+        SpriteRenderer[] warningSprites = null;
+        if (showExclamation)
         {
-            activeWarningObject = Instantiate(warningPrefab, warningPos, Quaternion.identity);
-            if (!activeWarningObject.activeSelf)
+            if (warningPrefab != null)
             {
-                activeWarningObject.SetActive(true);
+                activeWarningObject = Instantiate(warningPrefab, warningPos, Quaternion.identity);
+                if (!activeWarningObject.activeSelf)
+                {
+                    activeWarningObject.SetActive(true);
+                }
+                activeWarningObject.transform.position = warningPos;
             }
-            activeWarningObject.transform.position = warningPos;
-            yield return new WaitForSeconds(duration);
-            ClearActiveWarning();
-            yield break;
+            else
+            {
+                TextMeshPro runtimeWarningText = CreateRuntimeWarningMark(warningPos, pattern != null ? pattern.obstaclePrefab : null);
+                activeWarningObject = runtimeWarningText.gameObject;
+            }
+
+            if (activeWarningObject != null)
+            {
+                warningTexts = activeWarningObject.GetComponentsInChildren<TMP_Text>(true);
+                warningSprites = activeWarningObject.GetComponentsInChildren<SpriteRenderer>(true);
+            }
         }
 
-        TextMeshPro warningText = CreateRuntimeWarningMark(warningPos, obstaclePrefab);
-        activeWarningObject = warningText.gameObject;
+        SpriteRenderer trajectoryRenderer = null;
+        Color trajectoryBaseColor = pattern != null ? pattern.trajectoryColor : new Color(0f, 1f, 1f, 0.35f);
+        int blinkCount = Mathf.Max(1, pattern != null ? pattern.blinkCount : warningBlinkCount);
+        if (showTrajectory)
+        {
+            trajectoryRenderer = CreateTrajectoryWarning(pattern, spawnType, spawnPos, trajectoryBaseColor);
+        }
 
-        int blinkCount = Mathf.Max(1, warningBlinkCount);
         float elapsed = 0f;
 
         while (elapsed < duration)
         {
-            float normalizedTime = Mathf.Clamp01(elapsed / duration);
-            float blinkT = 1f - Mathf.PingPong(normalizedTime * blinkCount * 2f, 1f);
+            float cycleProgress = Mathf.Repeat((elapsed / duration) * blinkCount, 1f);
+            bool isVisiblePhase = cycleProgress < 0.5f;
 
-            if (warningText != null)
+            if (trajectoryRenderer != null)
             {
-                Color color = warningTextColor;
-                color.a = Mathf.Lerp(warningTextMinAlpha, warningTextMaxAlpha, blinkT);
-                warningText.color = color;
+                Color color = trajectoryBaseColor;
+                color.a = isVisiblePhase ? trajectoryBaseColor.a : TrajectoryDimAlpha;
+                trajectoryRenderer.color = color;
+            }
+
+            if (showExclamation && activeWarningObject != null)
+            {
+                ApplyExclamationBlinkState(activeWarningObject, warningTexts, warningSprites, isVisiblePhase);
             }
 
             elapsed += Time.deltaTime;
@@ -243,6 +304,120 @@ public class MemeAttackSpawner : MonoBehaviour
         }
 
         ClearActiveWarning();
+    }
+
+    private static void ApplyExclamationBlinkState(
+        GameObject warningObject,
+        TMP_Text[] warningTexts,
+        SpriteRenderer[] warningSprites,
+        bool isVisible)
+    {
+        bool hasAlphaControlledComponent = false;
+        float targetAlpha = isVisible ? 1f : ExclamationDimAlpha;
+
+        if (warningTexts != null && warningTexts.Length > 0)
+        {
+            hasAlphaControlledComponent = true;
+            for (int i = 0; i < warningTexts.Length; i++)
+            {
+                TMP_Text tmp = warningTexts[i];
+                if (tmp == null)
+                {
+                    continue;
+                }
+
+                Color color = tmp.color;
+                color.a = targetAlpha;
+                tmp.color = color;
+            }
+        }
+
+        if (warningSprites != null && warningSprites.Length > 0)
+        {
+            hasAlphaControlledComponent = true;
+            for (int i = 0; i < warningSprites.Length; i++)
+            {
+                SpriteRenderer sr = warningSprites[i];
+                if (sr == null)
+                {
+                    continue;
+                }
+
+                Color color = sr.color;
+                color.a = targetAlpha;
+                sr.color = color;
+            }
+        }
+
+        if (!hasAlphaControlledComponent && warningObject != null && warningObject.activeSelf != isVisible)
+        {
+            warningObject.SetActive(isVisible);
+        }
+    }
+
+    private SpriteRenderer CreateTrajectoryWarning(
+        MemePatternData pattern,
+        MemeSpawnType spawnType,
+        Vector3 spawnPos,
+        Color baseColor)
+    {
+        float thickness = Mathf.Max(0.1f, pattern != null ? pattern.trajectoryThickness : 1.5f);
+        Vector3 trajectoryPos;
+        Vector3 trajectoryScale;
+
+        if (spawnType == MemeSpawnType.Center)
+        {
+            trajectoryPos = new Vector3(spawnPos.x, 0f, 0f);
+            trajectoryScale = new Vector3(thickness, TrajectoryLength, 1f);
+        }
+        else
+        {
+            trajectoryPos = new Vector3(0f, spawnPos.y, 0f);
+            trajectoryScale = new Vector3(TrajectoryLength, thickness, 1f);
+        }
+
+        if (trajectoryWarningPrefab != null)
+        {
+            activeTrajectoryWarningObject = Instantiate(trajectoryWarningPrefab, trajectoryPos, Quaternion.identity);
+            if (!activeTrajectoryWarningObject.activeSelf)
+            {
+                activeTrajectoryWarningObject.SetActive(true);
+            }
+        }
+        else
+        {
+            activeTrajectoryWarningObject = new GameObject("WarningTrajectory");
+            SpriteRenderer fallbackRenderer = activeTrajectoryWarningObject.AddComponent<SpriteRenderer>();
+            fallbackRenderer.sprite = GetFallbackSquareSprite();
+            fallbackRenderer.sortingOrder = DefaultTrajectorySortingOrder;
+        }
+
+        activeTrajectoryWarningObject.transform.position = trajectoryPos;
+        activeTrajectoryWarningObject.transform.localScale = trajectoryScale;
+
+        SpriteRenderer sr = activeTrajectoryWarningObject.GetComponentInChildren<SpriteRenderer>();
+        if (sr != null)
+        {
+            sr.color = baseColor;
+        }
+
+        return sr;
+    }
+
+    private static Sprite GetFallbackSquareSprite()
+    {
+        if (fallbackSquareSprite == null)
+        {
+            Texture2D tex = Texture2D.whiteTexture;
+            fallbackSquareSprite = Sprite.Create(
+                tex,
+                new Rect(0f, 0f, tex.width, tex.height),
+                new Vector2(0.5f, 0.5f),
+                tex.width
+            );
+        }
+
+        return fallbackSquareSprite;
     }
 
     private TextMeshPro CreateRuntimeWarningMark(Vector3 warningPos, MemeAttackObstacle obstaclePrefab)
@@ -275,6 +450,12 @@ public class MemeAttackSpawner : MonoBehaviour
         {
             Destroy(activeWarningObject);
             activeWarningObject = null;
+        }
+
+        if (activeTrajectoryWarningObject != null)
+        {
+            Destroy(activeTrajectoryWarningObject);
+            activeTrajectoryWarningObject = null;
         }
     }
 

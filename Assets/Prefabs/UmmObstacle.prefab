@@ -15,7 +15,7 @@ GameObject:
   - component: {fileID: 7803701249840195810}
   m_Layer: 0
   m_Name: UmmObstacle
-  m_TagString: Untagged
+  m_TagString: Obstacle
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -182,7 +182,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MemeAttackObstacle
   spriteRenderer: {fileID: 8262317362795991111}
   obstacleCollider: {fileID: 7235050016327654208}
-  warningText: {fileID: 8570027620679111315, guid: 835ed0ae7c186ea48bbf3bd704bdc1f3, type: 3}
+  warningText: {fileID: 0}
   warningDuration: 0.6
   warningBlinkCount: 3
   horizontalDashSpeed: 18

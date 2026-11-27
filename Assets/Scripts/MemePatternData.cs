@@ -1,6 +1,13 @@
 using UnityEngine;
 using UnityEngine.Serialization;
 
+public enum WarningStyle
+{
+    Exclamation,
+    Trajectory,
+    Both
+}
+
 [CreateAssetMenu(fileName = "NewMemePattern", menuName = "MemeGame/Meme Pattern")]
 public class MemePatternData : ScriptableObject
 {
@@ -16,6 +23,12 @@ public class MemePatternData : ScriptableObject
 
     [Header("Movement")]
     [Min(0f)] public float moveSpeed = 10f;
+
+    [Header("Warning Settings")]
+    public WarningStyle warningStyle = WarningStyle.Trajectory;
+    [Min(0.1f)] public float trajectoryThickness = 1.5f;
+    public Color trajectoryColor = new Color(0f, 1f, 1f, 0.35f);
+    [Min(1)] public int blinkCount = 3;
 
     [Header("Spawn Settings")]
     [Min(0.01f)] public float spawnWeight = 1f;

@@ -383,6 +383,12 @@ public static class MemeSetupTool
         serializedSpawner.FindProperty("warningDuration").floatValue = WarningDuration;
         serializedSpawner.FindProperty("repeatSpawn").boolValue = false;
 
+        GameObject trajectoryPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/WarningTrajectory.prefab");
+        if (trajectoryPrefab != null)
+        {
+            serializedSpawner.FindProperty("trajectoryWarningPrefab").objectReferenceValue = trajectoryPrefab;
+        }
+
         SerializedProperty patternsProp = serializedSpawner.FindProperty("patterns");
         if (patternsProp.arraySize == 0)
         {

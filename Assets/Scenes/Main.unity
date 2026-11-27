@@ -403,14 +403,16 @@ MonoBehaviour:
   orderMode: 0
   patterns:
   - {fileID: 11400000, guid: c79c58fca86443843ac5e6bd9e637eff, type: 2}
+  - {fileID: 11400000, guid: 177a9ee24f99a7e47ac383579b7ac20c, type: 2}
   initialDelay: 1.5
   warningDuration: 1
   repeatSpawn: 1
   spawnInterval: 4.5
   warningPrefab: {fileID: 3835444878251977874, guid: 835ed0ae7c186ea48bbf3bd704bdc1f3, type: 3}
+  trajectoryWarningPrefab: {fileID: 4829173645182937461, guid: a4b7c9e2d1f0483a9b5c6e7f8a1d2c3e, type: 3}
   leftWarningX: -9
   rightWarningX: 9
-  warningOffsetY: 1
+  warningOffsetY: 3
   warningBlinkCount: 3
   warningTextColor: {r: 1, g: 0.1, b: 0.1, a: 1}
   warningTextMinAlpha: 0.15

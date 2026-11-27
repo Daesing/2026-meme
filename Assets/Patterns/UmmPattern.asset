@@ -18,6 +18,10 @@ MonoBehaviour:
   attackSfx: {fileID: 8300000, guid: 6728b08447e0f754cb9d1a98a3876ceb, type: 3}
   soundVolume: 1
   moveSpeed: 10
+  warningStyle: 1
+  trajectoryThickness: 1.5
+  trajectoryColor: {r: 0, g: 1, b: 1, a: 0.35}
+  blinkCount: 3
   spawnWeight: 1
   allowLeft: 1
   allowRight: 1
