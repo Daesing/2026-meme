@@ -8,6 +8,14 @@ public enum WarningStyle
     Both
 }
 
+public enum MemeFormationType
+{
+    Single = 0,         // 기존 단일 스폰 (기본값)
+    DualOpposite = 1,   // 좌우 양쪽에서 동시에 2개 등장 (서로 다른 높이 오프셋 적용 가능)
+    DualParallel = 2,   // 같은 방향에서 상하 2줄로 동시에 2개 등장
+    FanSpread = 3       // 한 지점에서 부채꼴 각도로 여러 발 동시 발사
+}
+
 [CreateAssetMenu(fileName = "NewMemePattern", menuName = "MemeGame/Meme Pattern")]
 public class MemePatternData : ScriptableObject
 {
@@ -47,4 +55,19 @@ public class MemePatternData : ScriptableObject
     public string memeTitle;
     [Tooltip("게임 오버 성적표에 표시될 탈락 한줄평")]
     [TextArea(2, 4)] public string failComment;
+
+    [Header("Multi-Spawn & Barrage")]
+    [SerializeField] private MemeFormationType formation = MemeFormationType.Single;
+    [SerializeField, Min(1)] private int projectileCount = 1;
+    [SerializeField] private float dualHeightSeparation = 2.4f;
+    [SerializeField] private float fanTotalAngle = 35f;
+    [SerializeField, Min(0f)] private float burstInterval = 0f;
+    [SerializeField] private float projectileScaleMultiplier = 1f;
+
+    public MemeFormationType Formation => formation;
+    public int ProjectileCount => Mathf.Max(1, projectileCount);
+    public float DualHeightSeparation => dualHeightSeparation;
+    public float FanTotalAngle => fanTotalAngle;
+    public float BurstInterval => Mathf.Max(0f, burstInterval);
+    public float ProjectileScaleMultiplier => projectileScaleMultiplier > 0f ? projectileScaleMultiplier : 1f;
 }

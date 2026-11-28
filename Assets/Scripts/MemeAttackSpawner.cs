@@ -57,14 +57,26 @@ public class MemeAttackSpawner : MonoBehaviour
     private const float TrajectoryDimAlpha = 0.05f;
     private const float ExclamationDimAlpha = 0.1f;
     private const int DefaultTrajectorySortingOrder = 15;
+    private const float BurstRandomOffsetRange = 0.45f;
+
+    private struct SpawnShot
+    {
+        public MemeSpawnType SpawnType;
+        public Vector3 SpawnPos;
+        public Vector3 WarningPos;
+        public Vector2 MoveDirection;
+        public bool UseCustomDirection;
+        public bool ShowExclamation;
+    }
 
     private readonly List<int> shuffleBag = new List<int>();
     private readonly List<int> validIndicesBuffer = new List<int>();
     private readonly List<MemeSpawnType> allowedSpawnTypesBuffer = new List<MemeSpawnType>(3);
+    private readonly List<SpawnShot> shotPlanBuffer = new List<SpawnShot>();
+    private readonly List<GameObject> activeWarningObjects = new List<GameObject>();
+    private readonly List<GameObject> activeTrajectoryWarningObjects = new List<GameObject>();
 
     private Coroutine spawnRoutine;
-    private GameObject activeWarningObject;
-    private GameObject activeTrajectoryWarningObject;
     private static Sprite fallbackSquareSprite;
     private int sequentialCursor;
     private int lastSpawnedIndex = -1;
@@ -228,25 +240,279 @@ public class MemeAttackSpawner : MonoBehaviour
 
     private IEnumerator PlayMemeAttackSequence(MemePatternData pattern, MemeSpawnType spawnType)
     {
-        ResolvePositions(pattern, spawnType, out Vector3 spawnPos, out Vector3 warningPos);
-        float effectiveWarningDuration = GetEffectiveWarningDuration(pattern.obstaclePrefab);
-
-        if (effectiveWarningDuration > 0f)
+        BuildShotPlan(pattern, spawnType, shotPlanBuffer);
+        if (shotPlanBuffer.Count == 0)
         {
-            yield return ShowWarningRoutine(pattern, spawnType, spawnPos, warningPos, effectiveWarningDuration);
+            yield break;
         }
 
-        MemeAttackObstacle instance = Instantiate(pattern.obstaclePrefab, spawnPos, Quaternion.identity);
+        float effectiveWarningDuration = GetEffectiveWarningDuration(pattern.obstaclePrefab);
+        if (effectiveWarningDuration > 0f)
+        {
+            yield return ShowWarningRoutine(pattern, shotPlanBuffer, effectiveWarningDuration);
+        }
+
+        bool isSingleBurst = pattern.Formation == MemeFormationType.Single && pattern.BurstInterval > 0f;
+        if (isSingleBurst)
+        {
+            SpawnShot baseShot = shotPlanBuffer[0];
+            int count = pattern.ProjectileCount;
+            float interval = pattern.BurstInterval;
+
+            for (int i = 0; i < count; i++)
+            {
+                SpawnShot shot = baseShot;
+                if (i > 0 && !pattern.useCustomPosition)
+                {
+                    shot.SpawnPos = ApplyBurstOffset(baseShot.SpawnPos, baseShot.SpawnType);
+                }
+
+                SpawnObstacleShot(pattern, shot, playSfx: true);
+
+                if (i < count - 1)
+                {
+                    yield return new WaitForSeconds(interval);
+                }
+            }
+
+            yield break;
+        }
+
+        bool isStaggeredFan = pattern.Formation == MemeFormationType.FanSpread && pattern.BurstInterval > 0f;
+        if (isStaggeredFan)
+        {
+            float interval = pattern.BurstInterval;
+            for (int i = 0; i < shotPlanBuffer.Count; i++)
+            {
+                SpawnObstacleShot(pattern, shotPlanBuffer[i], playSfx: true);
+
+                if (i < shotPlanBuffer.Count - 1)
+                {
+                    yield return new WaitForSeconds(interval);
+                }
+            }
+
+            yield break;
+        }
+
+        for (int i = 0; i < shotPlanBuffer.Count; i++)
+        {
+            SpawnObstacleShot(pattern, shotPlanBuffer[i], playSfx: i == 0);
+        }
+    }
+
+    private void BuildShotPlan(MemePatternData pattern, MemeSpawnType spawnType, List<SpawnShot> results)
+    {
+        results.Clear();
+        if (pattern == null || pattern.obstaclePrefab == null)
+        {
+            return;
+        }
+
+        switch (pattern.Formation)
+        {
+            case MemeFormationType.DualOpposite:
+                BuildDualOppositePlan(pattern, results);
+                break;
+
+            case MemeFormationType.DualParallel:
+                BuildDualParallelPlan(pattern, spawnType, results);
+                break;
+
+            case MemeFormationType.FanSpread:
+                BuildFanSpreadPlan(pattern, spawnType, results);
+                break;
+
+            case MemeFormationType.Single:
+            default:
+            {
+                ResolvePositions(pattern, spawnType, out Vector3 spawnPos, out Vector3 warningPos);
+                results.Add(new SpawnShot
+                {
+                    SpawnType = spawnType,
+                    SpawnPos = spawnPos,
+                    WarningPos = warningPos,
+                    MoveDirection = Vector2.zero,
+                    UseCustomDirection = false,
+                    ShowExclamation = true
+                });
+                break;
+            }
+        }
+    }
+
+    private void BuildDualOppositePlan(MemePatternData pattern, List<SpawnShot> results)
+    {
+        float separation = Mathf.Abs(pattern.DualHeightSeparation);
+        ResolveDualHeights(separation, out float lowerY, out float upperY);
+
+        bool leftIsLower = Random.value < 0.5f;
+        float leftY = leftIsLower ? lowerY : upperY;
+        float rightY = leftIsLower ? upperY : lowerY;
+
+        results.Add(new SpawnShot
+        {
+            SpawnType = MemeSpawnType.Left,
+            SpawnPos = new Vector3(leftSpawnX, leftY, 0f),
+            WarningPos = new Vector3(leftWarningX, leftY + warningOffsetY, 0f),
+            MoveDirection = Vector2.zero,
+            UseCustomDirection = false,
+            ShowExclamation = true
+        });
+
+        results.Add(new SpawnShot
+        {
+            SpawnType = MemeSpawnType.Right,
+            SpawnPos = new Vector3(rightSpawnX, rightY, 0f),
+            WarningPos = new Vector3(rightWarningX, rightY + warningOffsetY, 0f),
+            MoveDirection = Vector2.zero,
+            UseCustomDirection = false,
+            ShowExclamation = true
+        });
+    }
+
+    private void BuildDualParallelPlan(MemePatternData pattern, MemeSpawnType spawnType, List<SpawnShot> results)
+    {
+        MemeSpawnType horizontalType = ResolveHorizontalSpawnType(pattern, spawnType);
+        float separation = Mathf.Abs(pattern.DualHeightSeparation);
+        ResolveDualHeights(separation, out float lowerY, out float upperY);
+
+        float spawnX = horizontalType == MemeSpawnType.Left ? leftSpawnX : rightSpawnX;
+        float warningX = horizontalType == MemeSpawnType.Left ? leftWarningX : rightWarningX;
+
+        results.Add(new SpawnShot
+        {
+            SpawnType = horizontalType,
+            SpawnPos = new Vector3(spawnX, lowerY, 0f),
+            WarningPos = new Vector3(warningX, lowerY + warningOffsetY, 0f),
+            MoveDirection = Vector2.zero,
+            UseCustomDirection = false,
+            ShowExclamation = true
+        });
+
+        results.Add(new SpawnShot
+        {
+            SpawnType = horizontalType,
+            SpawnPos = new Vector3(spawnX, upperY, 0f),
+            WarningPos = new Vector3(warningX, upperY + warningOffsetY, 0f),
+            MoveDirection = Vector2.zero,
+            UseCustomDirection = false,
+            ShowExclamation = true
+        });
+    }
+
+    private void BuildFanSpreadPlan(MemePatternData pattern, MemeSpawnType spawnType, List<SpawnShot> results)
+    {
+        ResolvePositions(pattern, spawnType, out Vector3 spawnPos, out Vector3 warningPos);
+
+        Vector2 baseDirection = GetBaseDirection(spawnType);
+        float baseAngleDeg = Mathf.Atan2(baseDirection.y, baseDirection.x) * Mathf.Rad2Deg;
+        int count = pattern.ProjectileCount;
+        float halfFanAngle = pattern.FanTotalAngle * 0.5f;
+
+        for (int i = 0; i < count; i++)
+        {
+            float angleOffset = count == 1
+                ? 0f
+                : Mathf.Lerp(-halfFanAngle, halfFanAngle, (float)i / (count - 1));
+            float angleRad = (baseAngleDeg + angleOffset) * Mathf.Deg2Rad;
+            Vector2 dir = new Vector2(Mathf.Cos(angleRad), Mathf.Sin(angleRad));
+
+            results.Add(new SpawnShot
+            {
+                SpawnType = spawnType,
+                SpawnPos = spawnPos,
+                WarningPos = warningPos,
+                MoveDirection = dir,
+                UseCustomDirection = true,
+                ShowExclamation = i == 0
+            });
+        }
+    }
+
+    private void ResolveDualHeights(float separation, out float lowerY, out float upperY)
+    {
+        float minY = Mathf.Min(horizontalMinY, horizontalMaxY);
+        float maxY = Mathf.Max(horizontalMinY, horizontalMaxY);
+        float maxLowerY = Mathf.Max(minY, maxY - separation);
+        lowerY = Random.Range(minY, maxLowerY);
+        upperY = lowerY + separation;
+    }
+
+    private MemeSpawnType ResolveHorizontalSpawnType(MemePatternData pattern, MemeSpawnType requestedType)
+    {
+        if (requestedType == MemeSpawnType.Left || requestedType == MemeSpawnType.Right)
+        {
+            return requestedType;
+        }
+
+        if (pattern.allowLeft && !pattern.allowRight)
+        {
+            return MemeSpawnType.Left;
+        }
+
+        if (pattern.allowRight && !pattern.allowLeft)
+        {
+            return MemeSpawnType.Right;
+        }
+
+        return Random.value < 0.5f ? MemeSpawnType.Left : MemeSpawnType.Right;
+    }
+
+    private static Vector2 GetBaseDirection(MemeSpawnType spawnType)
+    {
+        switch (spawnType)
+        {
+            case MemeSpawnType.Left:
+                return Vector2.right;
+
+            case MemeSpawnType.Right:
+                return Vector2.left;
+
+            case MemeSpawnType.Center:
+            default:
+                return Vector2.down;
+        }
+    }
+
+    private Vector3 ApplyBurstOffset(Vector3 basePos, MemeSpawnType spawnType)
+    {
+        if (spawnType == MemeSpawnType.Center)
+        {
+            float offsetX = Random.Range(-BurstRandomOffsetRange, BurstRandomOffsetRange);
+            float minX = centerSpawnPosition.x - centerRandomOffsetX;
+            float maxX = centerSpawnPosition.x + centerRandomOffsetX;
+            float clampedX = centerRandomOffsetX > 0f
+                ? Mathf.Clamp(basePos.x + offsetX, minX, maxX)
+                : basePos.x + offsetX;
+            return new Vector3(clampedX, basePos.y, basePos.z);
+        }
+
+        float minY = Mathf.Min(horizontalMinY, horizontalMaxY);
+        float maxY = Mathf.Max(horizontalMinY, horizontalMaxY);
+        float offsetY = Random.Range(-BurstRandomOffsetRange, BurstRandomOffsetRange);
+        float clampedY = Mathf.Clamp(basePos.y + offsetY, minY, maxY);
+        return new Vector3(basePos.x, clampedY, basePos.z);
+    }
+
+    private void SpawnObstacleShot(MemePatternData pattern, SpawnShot shot, bool playSfx)
+    {
+        MemeAttackObstacle instance = Instantiate(pattern.obstaclePrefab, shot.SpawnPos, Quaternion.identity);
         instance.SetSourcePattern(pattern);
         instance.ApplyVisualOverride(pattern.overrideSprite, pattern.overrideMaterial);
 
         AudioClip attackSfx = pattern.attackSfx;
         float volume = pattern.soundVolume;
+        System.Action onAttackBegin = playSfx
+            ? () => AudioManager.Instance?.PlaySFX(attackSfx, volume)
+            : null;
 
         instance.Initialize(
-            spawnType,
+            shot.SpawnType,
             pattern.moveSpeed,
-            onAttackBegin: () => AudioManager.Instance?.PlaySFX(attackSfx, volume),
+            shot.UseCustomDirection ? shot.MoveDirection : Vector2.zero,
+            pattern.ProjectileScaleMultiplier,
+            onAttackBegin: onAttackBegin,
             sourcePattern: pattern
         );
     }
@@ -268,9 +534,7 @@ public class MemeAttackSpawner : MonoBehaviour
 
     private IEnumerator ShowWarningRoutine(
         MemePatternData pattern,
-        MemeSpawnType spawnType,
-        Vector3 spawnPos,
-        Vector3 warningPos,
+        List<SpawnShot> shots,
         float duration)
     {
         ClearActiveWarning();
@@ -280,38 +544,55 @@ public class MemeAttackSpawner : MonoBehaviour
         bool showExclamation = warningStyle == WarningStyle.Exclamation || warningStyle == WarningStyle.Both;
         bool showTrajectory = warningStyle == WarningStyle.Trajectory || warningStyle == WarningStyle.Both;
 
-        TMP_Text[] warningTexts = null;
-        SpriteRenderer[] warningSprites = null;
+        List<TMP_Text[]> warningTextsList = showExclamation ? new List<TMP_Text[]>(shots.Count) : null;
+        List<SpriteRenderer[]> warningSpritesList = showExclamation ? new List<SpriteRenderer[]>(shots.Count) : null;
         if (showExclamation)
         {
-            if (warningPrefab != null)
+            for (int i = 0; i < shots.Count; i++)
             {
-                activeWarningObject = Instantiate(warningPrefab, warningPos, Quaternion.identity);
-                if (!activeWarningObject.activeSelf)
+                if (!shots[i].ShowExclamation)
                 {
-                    activeWarningObject.SetActive(true);
+                    continue;
                 }
-                activeWarningObject.transform.position = warningPos;
-            }
-            else
-            {
-                TextMeshPro runtimeWarningText = CreateRuntimeWarningMark(warningPos, pattern != null ? pattern.obstaclePrefab : null);
-                activeWarningObject = runtimeWarningText.gameObject;
-            }
 
-            if (activeWarningObject != null)
-            {
-                warningTexts = activeWarningObject.GetComponentsInChildren<TMP_Text>(true);
-                warningSprites = activeWarningObject.GetComponentsInChildren<SpriteRenderer>(true);
+                GameObject warningObj;
+                if (warningPrefab != null)
+                {
+                    warningObj = Instantiate(warningPrefab, shots[i].WarningPos, Quaternion.identity);
+                    if (!warningObj.activeSelf)
+                    {
+                        warningObj.SetActive(true);
+                    }
+                    warningObj.transform.position = shots[i].WarningPos;
+                }
+                else
+                {
+                    TextMeshPro runtimeWarningText = CreateRuntimeWarningMark(shots[i].WarningPos, pattern != null ? pattern.obstaclePrefab : null);
+                    warningObj = runtimeWarningText.gameObject;
+                }
+
+                if (warningObj != null)
+                {
+                    activeWarningObjects.Add(warningObj);
+                    warningTextsList.Add(warningObj.GetComponentsInChildren<TMP_Text>(true));
+                    warningSpritesList.Add(warningObj.GetComponentsInChildren<SpriteRenderer>(true));
+                }
             }
         }
 
-        SpriteRenderer trajectoryRenderer = null;
+        List<SpriteRenderer> trajectoryRenderers = showTrajectory ? new List<SpriteRenderer>(shots.Count) : null;
         Color trajectoryBaseColor = pattern != null ? pattern.trajectoryColor : new Color(0f, 1f, 1f, 0.35f);
         int blinkCount = Mathf.Max(1, pattern != null ? pattern.blinkCount : warningBlinkCount);
         if (showTrajectory)
         {
-            trajectoryRenderer = CreateTrajectoryWarning(pattern, spawnType, spawnPos, trajectoryBaseColor);
+            for (int i = 0; i < shots.Count; i++)
+            {
+                SpriteRenderer sr = CreateTrajectoryWarning(pattern, shots[i], trajectoryBaseColor);
+                if (sr != null)
+                {
+                    trajectoryRenderers.Add(sr);
+                }
+            }
         }
 
         float elapsed = 0f;
@@ -321,16 +602,29 @@ public class MemeAttackSpawner : MonoBehaviour
             float cycleProgress = Mathf.Repeat((elapsed / duration) * blinkCount, 1f);
             bool isVisiblePhase = cycleProgress < 0.5f;
 
-            if (trajectoryRenderer != null)
+            if (trajectoryRenderers != null)
             {
                 Color color = trajectoryBaseColor;
                 color.a = isVisiblePhase ? trajectoryBaseColor.a : TrajectoryDimAlpha;
-                trajectoryRenderer.color = color;
+                for (int i = 0; i < trajectoryRenderers.Count; i++)
+                {
+                    if (trajectoryRenderers[i] != null)
+                    {
+                        trajectoryRenderers[i].color = color;
+                    }
+                }
             }
 
-            if (showExclamation && activeWarningObject != null)
+            if (showExclamation)
             {
-                ApplyExclamationBlinkState(activeWarningObject, warningTexts, warningSprites, isVisiblePhase);
+                for (int i = 0; i < activeWarningObjects.Count; i++)
+                {
+                    GameObject warningObj = activeWarningObjects[i];
+                    if (warningObj != null)
+                    {
+                        ApplyExclamationBlinkState(warningObj, warningTextsList[i], warningSpritesList[i], isVisiblePhase);
+                    }
+                }
             }
 
             elapsed += Time.deltaTime;
@@ -391,45 +685,56 @@ public class MemeAttackSpawner : MonoBehaviour
 
     private SpriteRenderer CreateTrajectoryWarning(
         MemePatternData pattern,
-        MemeSpawnType spawnType,
-        Vector3 spawnPos,
+        SpawnShot shot,
         Color baseColor)
     {
         float thickness = Mathf.Max(0.1f, pattern != null ? pattern.trajectoryThickness : 1.5f);
         Vector3 trajectoryPos;
+        Quaternion trajectoryRotation = Quaternion.identity;
         Vector3 trajectoryScale;
 
-        if (spawnType == MemeSpawnType.Center)
+        if (shot.UseCustomDirection && shot.MoveDirection.sqrMagnitude > 0.0001f)
         {
-            trajectoryPos = new Vector3(spawnPos.x, 0f, 0f);
+            Vector2 dir = shot.MoveDirection.normalized;
+            float angleDeg = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+            trajectoryPos = shot.SpawnPos + new Vector3(dir.x, dir.y, 0f) * (TrajectoryLength * 0.5f);
+            trajectoryRotation = Quaternion.Euler(0f, 0f, angleDeg);
+            trajectoryScale = new Vector3(TrajectoryLength, thickness, 1f);
+        }
+        else if (shot.SpawnType == MemeSpawnType.Center)
+        {
+            trajectoryPos = new Vector3(shot.SpawnPos.x, 0f, 0f);
             trajectoryScale = new Vector3(thickness, TrajectoryLength, 1f);
         }
         else
         {
-            trajectoryPos = new Vector3(0f, spawnPos.y, 0f);
+            trajectoryPos = new Vector3(0f, shot.SpawnPos.y, 0f);
             trajectoryScale = new Vector3(TrajectoryLength, thickness, 1f);
         }
 
+        GameObject trajectoryObj;
         if (trajectoryWarningPrefab != null)
         {
-            activeTrajectoryWarningObject = Instantiate(trajectoryWarningPrefab, trajectoryPos, Quaternion.identity);
-            if (!activeTrajectoryWarningObject.activeSelf)
+            trajectoryObj = Instantiate(trajectoryWarningPrefab, trajectoryPos, trajectoryRotation);
+            if (!trajectoryObj.activeSelf)
             {
-                activeTrajectoryWarningObject.SetActive(true);
+                trajectoryObj.SetActive(true);
             }
         }
         else
         {
-            activeTrajectoryWarningObject = new GameObject("WarningTrajectory");
-            SpriteRenderer fallbackRenderer = activeTrajectoryWarningObject.AddComponent<SpriteRenderer>();
+            trajectoryObj = new GameObject("WarningTrajectory");
+            SpriteRenderer fallbackRenderer = trajectoryObj.AddComponent<SpriteRenderer>();
             fallbackRenderer.sprite = GetFallbackSquareSprite();
             fallbackRenderer.sortingOrder = DefaultTrajectorySortingOrder;
         }
 
-        activeTrajectoryWarningObject.transform.position = trajectoryPos;
-        activeTrajectoryWarningObject.transform.localScale = trajectoryScale;
+        trajectoryObj.transform.position = trajectoryPos;
+        trajectoryObj.transform.rotation = trajectoryRotation;
+        trajectoryObj.transform.localScale = trajectoryScale;
+        activeTrajectoryWarningObjects.Add(trajectoryObj);
 
-        SpriteRenderer sr = activeTrajectoryWarningObject.GetComponentInChildren<SpriteRenderer>();
+        SpriteRenderer sr = trajectoryObj.GetComponentInChildren<SpriteRenderer>();
         if (sr != null)
         {
             sr.color = baseColor;
@@ -480,17 +785,23 @@ public class MemeAttackSpawner : MonoBehaviour
 
     private void ClearActiveWarning()
     {
-        if (activeWarningObject != null)
+        for (int i = 0; i < activeWarningObjects.Count; i++)
         {
-            Destroy(activeWarningObject);
-            activeWarningObject = null;
+            if (activeWarningObjects[i] != null)
+            {
+                Destroy(activeWarningObjects[i]);
+            }
         }
+        activeWarningObjects.Clear();
 
-        if (activeTrajectoryWarningObject != null)
+        for (int i = 0; i < activeTrajectoryWarningObjects.Count; i++)
         {
-            Destroy(activeTrajectoryWarningObject);
-            activeTrajectoryWarningObject = null;
+            if (activeTrajectoryWarningObjects[i] != null)
+            {
+                Destroy(activeTrajectoryWarningObjects[i]);
+            }
         }
+        activeTrajectoryWarningObjects.Clear();
     }
 
     private int SelectNextPatternIndex()

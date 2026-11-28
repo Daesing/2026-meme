@@ -46,6 +46,9 @@ public class MemeAttackObstacle : MonoBehaviour
     private Rigidbody2D rb;
     private MemeSpawnType spawnType = MemeSpawnType.Left;
     private float activeMoveSpeed = 10f;
+    private bool useCustomDirection;
+    private Vector2 customMoveDirection = Vector2.right;
+    private float activeScaleMultiplier = 1f;
     private Color baseColor = Color.white;
     private bool baseColorCached;
     private Action onAttackBeginCallback;
@@ -104,6 +107,17 @@ public class MemeAttackObstacle : MonoBehaviour
 
     public void Initialize(MemeSpawnType type, float moveSpeed, Action onAttackBegin = null, MemePatternData sourcePattern = null)
     {
+        Initialize(type, moveSpeed, Vector2.zero, 1f, onAttackBegin, sourcePattern);
+    }
+
+    public void Initialize(
+        MemeSpawnType type,
+        float moveSpeed,
+        Vector2 moveDirection,
+        float scaleMultiplier = 1f,
+        Action onAttackBegin = null,
+        MemePatternData sourcePattern = null)
+    {
         EnsureComponents();
 
         if (sourcePattern != null)
@@ -113,19 +127,30 @@ public class MemeAttackObstacle : MonoBehaviour
 
         spawnType = type;
         activeMoveSpeed = Mathf.Max(0f, moveSpeed);
+        activeScaleMultiplier = scaleMultiplier > 0f ? scaleMultiplier : 1f;
+        useCustomDirection = moveDirection.sqrMagnitude > 0.0001f;
+        customMoveDirection = useCustomDirection ? moveDirection.normalized : Vector2.zero;
         onAttackBeginCallback = onAttackBegin;
         isAttacking = false;
         hasHitPlayer = false;
 
-        spriteRenderer.flipX = spawnType == MemeSpawnType.Right;
-
-        if (spawnType == MemeSpawnType.Center)
+        if (useCustomDirection)
         {
-            transform.localScale = Vector3.one * centerStartScale;
+            spriteRenderer.flipX = customMoveDirection.x < -0.01f;
+            transform.localScale = Vector3.one * (horizontalScale * activeScaleMultiplier);
         }
         else
         {
-            transform.localScale = Vector3.one * horizontalScale;
+            spriteRenderer.flipX = spawnType == MemeSpawnType.Right;
+
+            if (spawnType == MemeSpawnType.Center)
+            {
+                transform.localScale = Vector3.one * (centerStartScale * activeScaleMultiplier);
+            }
+            else
+            {
+                transform.localScale = Vector3.one * (horizontalScale * activeScaleMultiplier);
+            }
         }
 
         BeginAttack();
@@ -169,6 +194,20 @@ public class MemeAttackObstacle : MonoBehaviour
     {
         Vector3 pos = transform.position;
 
+        if (useCustomDirection)
+        {
+            pos.x += customMoveDirection.x * activeMoveSpeed * Time.deltaTime;
+            pos.y += customMoveDirection.y * activeMoveSpeed * Time.deltaTime;
+            transform.position = pos;
+
+            float upperLimitY = Mathf.Abs(offScreenMinY);
+            if (Mathf.Abs(pos.x) > offScreenLimitX || pos.y < offScreenMinY || pos.y > upperLimitY)
+            {
+                Destroy(gameObject);
+            }
+            return;
+        }
+
         switch (spawnType)
         {
             case MemeSpawnType.Left:
@@ -194,7 +233,8 @@ public class MemeAttackObstacle : MonoBehaviour
                 transform.position = pos;
 
                 float currentScale = transform.localScale.x;
-                float nextScale = Mathf.Min(centerMaxScale, currentScale + centerScaleGrowSpeed * Time.deltaTime);
+                float effectiveMaxScale = centerMaxScale * activeScaleMultiplier;
+                float nextScale = Mathf.Min(effectiveMaxScale, currentScale + centerScaleGrowSpeed * activeScaleMultiplier * Time.deltaTime);
                 transform.localScale = Vector3.one * nextScale;
 
                 if (pos.y < offScreenMinY)
