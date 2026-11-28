@@ -16,6 +16,22 @@ public class MemeAttackSpawner : MonoBehaviour
     [SerializeField] private MemeOrderMode orderMode = MemeOrderMode.ShuffleBag;
     [SerializeField] private List<MemePatternData> patterns = new List<MemePatternData>();
 
+    [Header("Meme Waves (Course Mode)")]
+    [Tooltip("1개 이상의 유효한 MemeWaveData가 등록되면 웨이브(코스요리) 모드로 동작합니다. 비어 있으면 기존 단품 patterns 모드로 폴백합니다.")]
+    [SerializeField] private List<MemeWaveData> waves = new List<MemeWaveData>();
+
+    [Header("Score Difficulty Scaling")]
+    [Tooltip("점수 상승에 따라 웨이브 휴식 시간 단축 및 이동 속도 배율 상승을 적용합니다.")]
+    [SerializeField] private bool enableScoreDifficultyScaling = true;
+    [Tooltip("최대 난이도에 도달하는 기준 점수 (0 이하이면 난이도 상승 미적용)")]
+    [SerializeField, Min(0)] private int maxDifficultyScore = 5000;
+    [Tooltip("점수 상승 시 postWaveDelay가 기본값 대비 줄어드는 최소 비율 (예: 0.4 = 40%까지 단축)")]
+    [SerializeField, Range(0.1f, 1f)] private float minPostWaveDelayScale = 0.4f;
+    [Tooltip("웨이브 간 휴식 시간(postWaveDelay)의 최소 하한선(초)")]
+    [SerializeField, Min(0f)] private float minPostWaveDelay = 0.45f;
+    [Tooltip("점수 상승 시 장애물 이동 속도 최대 배율 상한선")]
+    [SerializeField, Min(1f)] private float maxDifficultySpeedMultiplier = 1.6f;
+
     [Header("Timing")]
     [SerializeField] private float initialDelay = 1.5f;
     [Tooltip("장애물 생성 전 경고 표시 지속 시간(초). 0 이하이면 프리팹(MemeAttackObstacle)의 warningDuration을 사용합니다.")]
@@ -71,6 +87,10 @@ public class MemeAttackSpawner : MonoBehaviour
 
     private readonly List<int> shuffleBag = new List<int>();
     private readonly List<int> validIndicesBuffer = new List<int>();
+    private readonly List<int> waveShuffleBag = new List<int>();
+    private readonly List<int> eligibleWaveIndicesBuffer = new List<int>();
+    private readonly HashSet<int> knownUnlockedWaveIndices = new HashSet<int>();
+    private readonly List<Coroutine> activeStepCoroutines = new List<Coroutine>();
     private readonly List<MemeSpawnType> allowedSpawnTypesBuffer = new List<MemeSpawnType>(3);
     private readonly List<SpawnShot> shotPlanBuffer = new List<SpawnShot>();
     private readonly List<GameObject> activeWarningObjects = new List<GameObject>();
@@ -80,6 +100,8 @@ public class MemeAttackSpawner : MonoBehaviour
     private static Sprite fallbackSquareSprite;
     private int sequentialCursor;
     private int lastSpawnedIndex = -1;
+    private int lastSpawnedWaveIndex = -1;
+    private float lastWarningSfxTime = -999f;
 
 #if UNITY_EDITOR
     private void Reset()
@@ -108,6 +130,10 @@ public class MemeAttackSpawner : MonoBehaviour
     }
 
     public IReadOnlyList<MemePatternData> Patterns => patterns;
+    public IReadOnlyList<MemeWaveData> Waves => waves;
+    public bool IsWaveModeActive => HasValidWave();
+    public float CurrentDifficultyProgress => GetDifficultyProgress();
+    public float CurrentDifficultySpeedMultiplier => GetDifficultySpeedMultiplier();
 
     private void Start()
     {
@@ -132,9 +158,9 @@ public class MemeAttackSpawner : MonoBehaviour
             return;
         }
 
-        if (!HasValidPattern())
+        if (!HasValidWave() && !HasValidPattern())
         {
-            Debug.LogWarning("[MemeAttackSpawner] 등록된 유효한 MemePatternData가 없습니다. 프로젝트 창에서 MemeGame/Meme Pattern 에셋을 생성해 등록하거나 'Tools/Meme Game/Setup Meme Attack'을 실행해 주세요.");
+            Debug.LogWarning("[MemeAttackSpawner] 등록된 유효한 MemeWaveData 또는 MemePatternData가 없습니다. 프로젝트 창에서 MemeGame/Meme Wave Data 또는 MemeGame/Meme Pattern 에셋을 생성해 등록해 주세요.");
             return;
         }
 
@@ -144,8 +170,11 @@ public class MemeAttackSpawner : MonoBehaviour
     public void ResetOrderState()
     {
         shuffleBag.Clear();
+        waveShuffleBag.Clear();
+        knownUnlockedWaveIndices.Clear();
         sequentialCursor = 0;
         lastSpawnedIndex = -1;
+        lastSpawnedWaveIndex = -1;
     }
 
     public void StopSpawning()
@@ -156,6 +185,7 @@ public class MemeAttackSpawner : MonoBehaviour
             spawnRoutine = null;
         }
 
+        StopActiveStepCoroutines();
         ClearActiveWarning();
     }
 
@@ -189,11 +219,13 @@ public class MemeAttackSpawner : MonoBehaviour
 
     private void OnDisable()
     {
+        StopActiveStepCoroutines();
         ClearActiveWarning();
     }
 
     private void OnDestroy()
     {
+        StopActiveStepCoroutines();
         ClearActiveWarning();
     }
 
@@ -204,8 +236,15 @@ public class MemeAttackSpawner : MonoBehaviour
             StopCoroutine(spawnRoutine);
         }
 
+        StopActiveStepCoroutines();
         ClearActiveWarning();
-        spawnRoutine = StartCoroutine(PlayMemeAttackSequence(pattern, spawnType));
+        spawnRoutine = StartCoroutine(PlayMemeAttackSequence(
+            pattern,
+            spawnType,
+            overrideSide: false,
+            overrideY: null,
+            speedMultiplier: GetDifficultySpeedMultiplier(),
+            clearAllWarningsOnStart: true));
     }
 
     private IEnumerator AutoSpawnLoop()
@@ -217,6 +256,28 @@ public class MemeAttackSpawner : MonoBehaviour
 
         do
         {
+            if (HasValidWave())
+            {
+                MemeWaveData wave = SelectNextWave();
+                if (wave == null)
+                {
+                    Debug.LogWarning("[MemeAttackSpawner] 등록된 유효한 MemeWaveData가 없어 스폰을 중단합니다.");
+                    break;
+                }
+
+                yield return PlayWaveRoutine(wave);
+
+                if (repeatSpawn)
+                {
+                    float postDelay = GetScaledPostWaveDelay(wave);
+                    if (postDelay > 0f)
+                    {
+                        yield return new WaitForSeconds(postDelay);
+                    }
+                }
+                continue;
+            }
+
             int nextIndex = SelectNextPatternIndex();
             if (nextIndex < 0)
             {
@@ -226,7 +287,13 @@ public class MemeAttackSpawner : MonoBehaviour
 
             MemePatternData pattern = patterns[nextIndex];
             MemeSpawnType spawnType = PickSpawnType(pattern);
-            yield return PlayMemeAttackSequence(pattern, spawnType);
+            yield return PlayMemeAttackSequence(
+                pattern,
+                spawnType,
+                overrideSide: false,
+                overrideY: null,
+                speedMultiplier: GetDifficultySpeedMultiplier(),
+                clearAllWarningsOnStart: true);
 
             if (repeatSpawn && spawnInterval > 0f)
             {
@@ -238,10 +305,100 @@ public class MemeAttackSpawner : MonoBehaviour
         spawnRoutine = null;
     }
 
-    private IEnumerator PlayMemeAttackSequence(MemePatternData pattern, MemeSpawnType spawnType)
+    private IEnumerator PlayWaveRoutine(MemeWaveData wave)
     {
-        BuildShotPlan(pattern, spawnType, shotPlanBuffer);
-        if (shotPlanBuffer.Count == 0)
+        if (wave == null || wave.steps == null || wave.steps.Count == 0)
+        {
+            yield break;
+        }
+
+        List<MemeWaveData.WaveStep> sortedSteps = new List<MemeWaveData.WaveStep>(wave.steps.Count);
+        for (int i = 0; i < wave.steps.Count; i++)
+        {
+            MemeWaveData.WaveStep step = wave.steps[i];
+            if (step != null && step.IsValid)
+            {
+                sortedSteps.Add(step);
+            }
+        }
+
+        if (sortedSteps.Count == 0)
+        {
+            yield break;
+        }
+
+        sortedSteps.Sort((a, b) => Mathf.Max(0f, a.delayFromWaveStart).CompareTo(Mathf.Max(0f, b.delayFromWaveStart)));
+
+        int pendingSteps = sortedSteps.Count;
+        float waveElapsed = 0f;
+
+        for (int i = 0; i < sortedSteps.Count; i++)
+        {
+            MemeWaveData.WaveStep step = sortedSteps[i];
+            float targetDelay = Mathf.Max(0f, step.delayFromWaveStart);
+            float waitTime = targetDelay - waveElapsed;
+            if (waitTime > 0f)
+            {
+                yield return new WaitForSeconds(waitTime);
+                waveElapsed = targetDelay;
+            }
+
+            Coroutine stepRoutine = null;
+            stepRoutine = StartCoroutine(RunWaveStepRoutine(step, () =>
+            {
+                pendingSteps--;
+                if (stepRoutine != null)
+                {
+                    activeStepCoroutines.Remove(stepRoutine);
+                }
+            }));
+
+            if (stepRoutine != null)
+            {
+                activeStepCoroutines.Add(stepRoutine);
+            }
+        }
+
+        while (pendingSteps > 0)
+        {
+            yield return null;
+        }
+    }
+
+    private IEnumerator RunWaveStepRoutine(MemeWaveData.WaveStep step, System.Action onCompleted)
+    {
+        if (step != null && step.IsValid)
+        {
+            MemePatternData pattern = step.pattern;
+            MemeSpawnType spawnType = ResolveWaveStepSpawnType(step, pattern);
+            float? overrideY = step.overrideNormalizedHeight
+                ? ResolveNormalizedHeightY(step.normalizedHeight)
+                : (float?)null;
+            float finalSpeedMultiplier = step.EffectiveSpeedMultiplier * GetDifficultySpeedMultiplier();
+
+            yield return PlayMemeAttackSequence(
+                pattern,
+                spawnType,
+                overrideSide: step.overrideSpawnSide,
+                overrideY: overrideY,
+                speedMultiplier: finalSpeedMultiplier,
+                clearAllWarningsOnStart: false);
+        }
+
+        onCompleted?.Invoke();
+    }
+
+    private IEnumerator PlayMemeAttackSequence(
+        MemePatternData pattern,
+        MemeSpawnType spawnType,
+        bool overrideSide = false,
+        float? overrideY = null,
+        float speedMultiplier = 1f,
+        bool clearAllWarningsOnStart = true)
+    {
+        List<SpawnShot> shots = clearAllWarningsOnStart ? shotPlanBuffer : new List<SpawnShot>();
+        BuildShotPlan(pattern, spawnType, shots, overrideSide, overrideY);
+        if (shots.Count == 0)
         {
             yield break;
         }
@@ -249,25 +406,25 @@ public class MemeAttackSpawner : MonoBehaviour
         float effectiveWarningDuration = GetEffectiveWarningDuration(pattern.obstaclePrefab);
         if (effectiveWarningDuration > 0f)
         {
-            yield return ShowWarningRoutine(pattern, shotPlanBuffer, effectiveWarningDuration);
+            yield return ShowWarningRoutine(pattern, shots, effectiveWarningDuration, clearAllWarningsOnStart);
         }
 
         bool isSingleBurst = pattern.Formation == MemeFormationType.Single && pattern.BurstInterval > 0f;
         if (isSingleBurst)
         {
-            SpawnShot baseShot = shotPlanBuffer[0];
+            SpawnShot baseShot = shots[0];
             int count = pattern.ProjectileCount;
             float interval = pattern.BurstInterval;
 
             for (int i = 0; i < count; i++)
             {
                 SpawnShot shot = baseShot;
-                if (i > 0 && !pattern.useCustomPosition)
+                if (i > 0 && !pattern.useCustomPosition && !overrideY.HasValue)
                 {
                     shot.SpawnPos = ApplyBurstOffset(baseShot.SpawnPos, baseShot.SpawnType);
                 }
 
-                SpawnObstacleShot(pattern, shot, playSfx: true);
+                SpawnObstacleShot(pattern, shot, playSfx: true, speedMultiplier: speedMultiplier);
 
                 if (i < count - 1)
                 {
@@ -282,11 +439,11 @@ public class MemeAttackSpawner : MonoBehaviour
         if (isStaggeredFan)
         {
             float interval = pattern.BurstInterval;
-            for (int i = 0; i < shotPlanBuffer.Count; i++)
+            for (int i = 0; i < shots.Count; i++)
             {
-                SpawnObstacleShot(pattern, shotPlanBuffer[i], playSfx: true);
+                SpawnObstacleShot(pattern, shots[i], playSfx: true, speedMultiplier: speedMultiplier);
 
-                if (i < shotPlanBuffer.Count - 1)
+                if (i < shots.Count - 1)
                 {
                     yield return new WaitForSeconds(interval);
                 }
@@ -295,13 +452,18 @@ public class MemeAttackSpawner : MonoBehaviour
             yield break;
         }
 
-        for (int i = 0; i < shotPlanBuffer.Count; i++)
+        for (int i = 0; i < shots.Count; i++)
         {
-            SpawnObstacleShot(pattern, shotPlanBuffer[i], playSfx: i == 0);
+            SpawnObstacleShot(pattern, shots[i], playSfx: i == 0, speedMultiplier: speedMultiplier);
         }
     }
 
-    private void BuildShotPlan(MemePatternData pattern, MemeSpawnType spawnType, List<SpawnShot> results)
+    private void BuildShotPlan(
+        MemePatternData pattern,
+        MemeSpawnType spawnType,
+        List<SpawnShot> results,
+        bool overrideSide = false,
+        float? overrideY = null)
     {
         results.Clear();
         if (pattern == null || pattern.obstaclePrefab == null)
@@ -312,21 +474,21 @@ public class MemeAttackSpawner : MonoBehaviour
         switch (pattern.Formation)
         {
             case MemeFormationType.DualOpposite:
-                BuildDualOppositePlan(pattern, results);
+                BuildDualOppositePlan(pattern, results, overrideY);
                 break;
 
             case MemeFormationType.DualParallel:
-                BuildDualParallelPlan(pattern, spawnType, results);
+                BuildDualParallelPlan(pattern, spawnType, results, overrideY);
                 break;
 
             case MemeFormationType.FanSpread:
-                BuildFanSpreadPlan(pattern, spawnType, results);
+                BuildFanSpreadPlan(pattern, spawnType, results, overrideSide, overrideY);
                 break;
 
             case MemeFormationType.Single:
             default:
             {
-                ResolvePositions(pattern, spawnType, out Vector3 spawnPos, out Vector3 warningPos);
+                ResolvePositions(pattern, spawnType, out Vector3 spawnPos, out Vector3 warningPos, overrideSide, overrideY);
                 results.Add(new SpawnShot
                 {
                     SpawnType = spawnType,
@@ -341,10 +503,10 @@ public class MemeAttackSpawner : MonoBehaviour
         }
     }
 
-    private void BuildDualOppositePlan(MemePatternData pattern, List<SpawnShot> results)
+    private void BuildDualOppositePlan(MemePatternData pattern, List<SpawnShot> results, float? overrideY = null)
     {
         float separation = Mathf.Abs(pattern.DualHeightSeparation);
-        ResolveDualHeights(separation, out float lowerY, out float upperY);
+        ResolveDualHeights(separation, out float lowerY, out float upperY, overrideY);
 
         bool leftIsLower = Random.value < 0.5f;
         float leftY = leftIsLower ? lowerY : upperY;
@@ -371,11 +533,11 @@ public class MemeAttackSpawner : MonoBehaviour
         });
     }
 
-    private void BuildDualParallelPlan(MemePatternData pattern, MemeSpawnType spawnType, List<SpawnShot> results)
+    private void BuildDualParallelPlan(MemePatternData pattern, MemeSpawnType spawnType, List<SpawnShot> results, float? overrideY = null)
     {
         MemeSpawnType horizontalType = ResolveHorizontalSpawnType(pattern, spawnType);
         float separation = Mathf.Abs(pattern.DualHeightSeparation);
-        ResolveDualHeights(separation, out float lowerY, out float upperY);
+        ResolveDualHeights(separation, out float lowerY, out float upperY, overrideY);
 
         float spawnX = horizontalType == MemeSpawnType.Left ? leftSpawnX : rightSpawnX;
         float warningX = horizontalType == MemeSpawnType.Left ? leftWarningX : rightWarningX;
@@ -401,9 +563,14 @@ public class MemeAttackSpawner : MonoBehaviour
         });
     }
 
-    private void BuildFanSpreadPlan(MemePatternData pattern, MemeSpawnType spawnType, List<SpawnShot> results)
+    private void BuildFanSpreadPlan(
+        MemePatternData pattern,
+        MemeSpawnType spawnType,
+        List<SpawnShot> results,
+        bool overrideSide = false,
+        float? overrideY = null)
     {
-        ResolvePositions(pattern, spawnType, out Vector3 spawnPos, out Vector3 warningPos);
+        ResolvePositions(pattern, spawnType, out Vector3 spawnPos, out Vector3 warningPos, overrideSide, overrideY);
 
         Vector2 baseDirection = GetBaseDirection(spawnType);
         float baseAngleDeg = Mathf.Atan2(baseDirection.y, baseDirection.x) * Mathf.Rad2Deg;
@@ -430,12 +597,20 @@ public class MemeAttackSpawner : MonoBehaviour
         }
     }
 
-    private void ResolveDualHeights(float separation, out float lowerY, out float upperY)
+    private void ResolveDualHeights(float separation, out float lowerY, out float upperY, float? overrideCenterY = null)
     {
         float minY = Mathf.Min(horizontalMinY, horizontalMaxY);
         float maxY = Mathf.Max(horizontalMinY, horizontalMaxY);
         float maxLowerY = Mathf.Max(minY, maxY - separation);
-        lowerY = Random.Range(minY, maxLowerY);
+        if (overrideCenterY.HasValue)
+        {
+            lowerY = Mathf.Clamp(overrideCenterY.Value - separation * 0.5f, minY, maxLowerY);
+        }
+        else
+        {
+            lowerY = Random.Range(minY, maxLowerY);
+        }
+
         upperY = lowerY + separation;
     }
 
@@ -495,7 +670,7 @@ public class MemeAttackSpawner : MonoBehaviour
         return new Vector3(basePos.x, clampedY, basePos.z);
     }
 
-    private void SpawnObstacleShot(MemePatternData pattern, SpawnShot shot, bool playSfx)
+    private void SpawnObstacleShot(MemePatternData pattern, SpawnShot shot, bool playSfx, float speedMultiplier = 1f)
     {
         MemeAttackObstacle instance = Instantiate(pattern.obstaclePrefab, shot.SpawnPos, Quaternion.identity);
         instance.SetSourcePattern(pattern);
@@ -510,6 +685,7 @@ public class MemeAttackSpawner : MonoBehaviour
         instance.Initialize(
             shot.SpawnType,
             pattern.moveSpeed,
+            speedMultiplier,
             shot.UseCustomDirection ? shot.MoveDirection : Vector2.zero,
             pattern.ProjectileScaleMultiplier,
             onAttackBegin: onAttackBegin,
@@ -535,15 +711,25 @@ public class MemeAttackSpawner : MonoBehaviour
     private IEnumerator ShowWarningRoutine(
         MemePatternData pattern,
         List<SpawnShot> shots,
-        float duration)
+        float duration,
+        bool clearAllWarningsOnStart = true)
     {
-        ClearActiveWarning();
-        AudioManager.Instance?.PlayWarningSFX();
+        if (clearAllWarningsOnStart)
+        {
+            ClearActiveWarning();
+        }
+
+        if (!Mathf.Approximately(lastWarningSfxTime, Time.time))
+        {
+            lastWarningSfxTime = Time.time;
+            AudioManager.Instance?.PlayWarningSFX();
+        }
 
         WarningStyle warningStyle = pattern != null ? pattern.warningStyle : WarningStyle.Trajectory;
         bool showExclamation = warningStyle == WarningStyle.Exclamation || warningStyle == WarningStyle.Both;
         bool showTrajectory = warningStyle == WarningStyle.Trajectory || warningStyle == WarningStyle.Both;
 
+        List<GameObject> localWarningObjects = showExclamation ? new List<GameObject>(shots.Count) : null;
         List<TMP_Text[]> warningTextsList = showExclamation ? new List<TMP_Text[]>(shots.Count) : null;
         List<SpriteRenderer[]> warningSpritesList = showExclamation ? new List<SpriteRenderer[]>(shots.Count) : null;
         if (showExclamation)
@@ -573,6 +759,7 @@ public class MemeAttackSpawner : MonoBehaviour
 
                 if (warningObj != null)
                 {
+                    localWarningObjects.Add(warningObj);
                     activeWarningObjects.Add(warningObj);
                     warningTextsList.Add(warningObj.GetComponentsInChildren<TMP_Text>(true));
                     warningSpritesList.Add(warningObj.GetComponentsInChildren<SpriteRenderer>(true));
@@ -580,6 +767,7 @@ public class MemeAttackSpawner : MonoBehaviour
             }
         }
 
+        List<GameObject> localTrajectoryObjects = showTrajectory ? new List<GameObject>(shots.Count) : null;
         List<SpriteRenderer> trajectoryRenderers = showTrajectory ? new List<SpriteRenderer>(shots.Count) : null;
         Color trajectoryBaseColor = pattern != null ? pattern.trajectoryColor : new Color(0f, 1f, 1f, 0.35f);
         int blinkCount = Mathf.Max(1, pattern != null ? pattern.blinkCount : warningBlinkCount);
@@ -587,7 +775,11 @@ public class MemeAttackSpawner : MonoBehaviour
         {
             for (int i = 0; i < shots.Count; i++)
             {
-                SpriteRenderer sr = CreateTrajectoryWarning(pattern, shots[i], trajectoryBaseColor);
+                SpriteRenderer sr = CreateTrajectoryWarning(pattern, shots[i], trajectoryBaseColor, out GameObject trajectoryObj);
+                if (trajectoryObj != null)
+                {
+                    localTrajectoryObjects.Add(trajectoryObj);
+                }
                 if (sr != null)
                 {
                     trajectoryRenderers.Add(sr);
@@ -617,9 +809,9 @@ public class MemeAttackSpawner : MonoBehaviour
 
             if (showExclamation)
             {
-                for (int i = 0; i < activeWarningObjects.Count; i++)
+                for (int i = 0; i < localWarningObjects.Count; i++)
                 {
-                    GameObject warningObj = activeWarningObjects[i];
+                    GameObject warningObj = localWarningObjects[i];
                     if (warningObj != null)
                     {
                         ApplyExclamationBlinkState(warningObj, warningTextsList[i], warningSpritesList[i], isVisiblePhase);
@@ -631,7 +823,7 @@ public class MemeAttackSpawner : MonoBehaviour
             yield return null;
         }
 
-        ClearActiveWarning();
+        ReleaseWarningObjects(localWarningObjects, localTrajectoryObjects);
     }
 
     private static void ApplyExclamationBlinkState(
@@ -686,33 +878,53 @@ public class MemeAttackSpawner : MonoBehaviour
     private SpriteRenderer CreateTrajectoryWarning(
         MemePatternData pattern,
         SpawnShot shot,
-        Color baseColor)
+        Color baseColor,
+        out GameObject trajectoryObj)
     {
-        float thickness = Mathf.Max(0.1f, pattern != null ? pattern.trajectoryThickness : 1.5f);
+        float fallbackThickness = Mathf.Max(0.1f, pattern != null ? pattern.trajectoryThickness : 1.5f);
+        bool hasCustomDirection = shot.UseCustomDirection && shot.MoveDirection.sqrMagnitude > 0.0001f;
+        Vector3 referenceCenter = shot.SpawnPos;
+        Vector3 colliderSize = Vector3.zero;
+        bool hasColliderBounds = pattern != null
+            && pattern.obstaclePrefab != null
+            && pattern.obstaclePrefab.TryGetTrajectoryBounds(
+                shot.SpawnPos,
+                shot.SpawnType,
+                hasCustomDirection,
+                pattern.ProjectileScaleMultiplier,
+                pattern.overrideSprite,
+                out referenceCenter,
+                out colliderSize);
+
         Vector3 trajectoryPos;
         Quaternion trajectoryRotation = Quaternion.identity;
         Vector3 trajectoryScale;
 
-        if (shot.UseCustomDirection && shot.MoveDirection.sqrMagnitude > 0.0001f)
+        if (hasCustomDirection)
         {
             Vector2 dir = shot.MoveDirection.normalized;
             float angleDeg = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
-            trajectoryPos = shot.SpawnPos + new Vector3(dir.x, dir.y, 0f) * (TrajectoryLength * 0.5f);
+            float projectedThickness = hasColliderBounds
+                ? Mathf.Abs(dir.y) * colliderSize.x + Mathf.Abs(dir.x) * colliderSize.y
+                : fallbackThickness;
+            float thickness = Mathf.Max(0.1f, projectedThickness);
+            trajectoryPos = referenceCenter + new Vector3(dir.x, dir.y, 0f) * (TrajectoryLength * 0.5f);
             trajectoryRotation = Quaternion.Euler(0f, 0f, angleDeg);
             trajectoryScale = new Vector3(TrajectoryLength, thickness, 1f);
         }
         else if (shot.SpawnType == MemeSpawnType.Center)
         {
-            trajectoryPos = new Vector3(shot.SpawnPos.x, 0f, 0f);
+            float thickness = Mathf.Max(0.1f, hasColliderBounds && colliderSize.x > 0f ? colliderSize.x : fallbackThickness);
+            trajectoryPos = new Vector3(referenceCenter.x, 0f, 0f);
             trajectoryScale = new Vector3(thickness, TrajectoryLength, 1f);
         }
         else
         {
-            trajectoryPos = new Vector3(0f, shot.SpawnPos.y, 0f);
+            float thickness = Mathf.Max(0.1f, hasColliderBounds && colliderSize.y > 0f ? colliderSize.y : fallbackThickness);
+            trajectoryPos = new Vector3(0f, referenceCenter.y, 0f);
             trajectoryScale = new Vector3(TrajectoryLength, thickness, 1f);
         }
 
-        GameObject trajectoryObj;
         if (trajectoryWarningPrefab != null)
         {
             trajectoryObj = Instantiate(trajectoryWarningPrefab, trajectoryPos, trajectoryRotation);
@@ -781,6 +993,48 @@ public class MemeAttackSpawner : MonoBehaviour
         }
 
         return warningText;
+    }
+
+    private void ReleaseWarningObjects(List<GameObject> warningObjects, List<GameObject> trajectoryObjects)
+    {
+        if (warningObjects != null)
+        {
+            for (int i = 0; i < warningObjects.Count; i++)
+            {
+                GameObject obj = warningObjects[i];
+                if (obj != null)
+                {
+                    activeWarningObjects.Remove(obj);
+                    Destroy(obj);
+                }
+            }
+        }
+
+        if (trajectoryObjects != null)
+        {
+            for (int i = 0; i < trajectoryObjects.Count; i++)
+            {
+                GameObject obj = trajectoryObjects[i];
+                if (obj != null)
+                {
+                    activeTrajectoryWarningObjects.Remove(obj);
+                    Destroy(obj);
+                }
+            }
+        }
+    }
+
+    private void StopActiveStepCoroutines()
+    {
+        for (int i = 0; i < activeStepCoroutines.Count; i++)
+        {
+            if (activeStepCoroutines[i] != null)
+            {
+                StopCoroutine(activeStepCoroutines[i]);
+            }
+        }
+
+        activeStepCoroutines.Clear();
     }
 
     private void ClearActiveWarning()
@@ -984,25 +1238,319 @@ public class MemeAttackSpawner : MonoBehaviour
             && patterns[index].obstaclePrefab != null;
     }
 
-    private void ResolvePositions(MemePatternData pattern, MemeSpawnType spawnType, out Vector3 spawnPos, out Vector3 warningPos)
+    private bool HasValidWave()
     {
-        if (pattern != null && pattern.useCustomPosition)
+        if (waves == null || waves.Count == 0)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < waves.Count; i++)
+        {
+            if (IsValidWaveIndex(i))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsValidWaveIndex(int index)
+    {
+        return waves != null
+            && index >= 0
+            && index < waves.Count
+            && waves[index] != null
+            && waves[index].HasValidStep();
+    }
+
+    private int GetCurrentDifficultyScore()
+    {
+        if (GameManager.Instance != null)
+        {
+            return Mathf.Max(0, GameManager.Instance.Score);
+        }
+
+        return 0;
+    }
+
+    private float GetDifficultyProgress()
+    {
+        if (!enableScoreDifficultyScaling || maxDifficultyScore <= 0)
+        {
+            return 0f;
+        }
+
+        return Mathf.Clamp01((float)GetCurrentDifficultyScore() / maxDifficultyScore);
+    }
+
+    private float GetDifficultySpeedMultiplier()
+    {
+        if (!enableScoreDifficultyScaling || maxDifficultyScore <= 0)
+        {
+            return 1f;
+        }
+
+        float upperBound = Mathf.Max(1f, maxDifficultySpeedMultiplier);
+        return Mathf.Lerp(1f, upperBound, GetDifficultyProgress());
+    }
+
+    private float GetScaledPostWaveDelay(MemeWaveData wave)
+    {
+        if (wave == null)
+        {
+            return 0f;
+        }
+
+        float baseDelay = Mathf.Max(0f, wave.postWaveDelay);
+        if (baseDelay <= 0f)
+        {
+            return 0f;
+        }
+
+        if (!enableScoreDifficultyScaling || maxDifficultyScore <= 0)
+        {
+            return baseDelay;
+        }
+
+        float t = GetDifficultyProgress();
+        float delayScale = Mathf.Lerp(1f, Mathf.Clamp(minPostWaveDelayScale, 0.1f, 1f), t);
+        float scaledDelay = baseDelay * delayScale;
+        float floorDelay = Mathf.Min(baseDelay, Mathf.Max(0f, minPostWaveDelay));
+        return Mathf.Max(floorDelay, scaledDelay);
+    }
+
+    private MemeWaveData SelectNextWave()
+    {
+        int currentScore = GetCurrentDifficultyScore();
+        CollectEligibleWaveIndices(currentScore);
+        if (eligibleWaveIndicesBuffer.Count == 0)
+        {
+            return null;
+        }
+
+        int selectedIndex = SelectWaveShuffleBagIndex();
+        if (!IsValidWaveIndex(selectedIndex))
+        {
+            return null;
+        }
+
+        return waves[selectedIndex];
+    }
+
+    private void CollectEligibleWaveIndices(int currentScore)
+    {
+        eligibleWaveIndicesBuffer.Clear();
+        if (waves == null || waves.Count == 0)
+        {
+            return;
+        }
+
+        int lowestUnlockScore = int.MaxValue;
+        for (int i = 0; i < waves.Count; i++)
+        {
+            if (!IsValidWaveIndex(i))
+            {
+                continue;
+            }
+
+            int unlockScore = Mathf.Max(0, waves[i].minUnlockScore);
+            if (unlockScore < lowestUnlockScore)
+            {
+                lowestUnlockScore = unlockScore;
+            }
+
+            if (unlockScore <= currentScore)
+            {
+                eligibleWaveIndicesBuffer.Add(i);
+            }
+        }
+
+        // 모든 유효 웨이브의 minUnlockScore가 현재 점수보다 높을 경우 가장 낮은 해금 점수의 웨이브로 폴백
+        if (eligibleWaveIndicesBuffer.Count == 0 && lowestUnlockScore < int.MaxValue)
+        {
+            for (int i = 0; i < waves.Count; i++)
+            {
+                if (IsValidWaveIndex(i) && Mathf.Max(0, waves[i].minUnlockScore) == lowestUnlockScore)
+                {
+                    eligibleWaveIndicesBuffer.Add(i);
+                }
+            }
+        }
+    }
+
+    private int SelectWaveShuffleBagIndex()
+    {
+        for (int i = waveShuffleBag.Count - 1; i >= 0; i--)
+        {
+            int idx = waveShuffleBag[i];
+            if (!IsValidWaveIndex(idx) || !eligibleWaveIndicesBuffer.Contains(idx))
+            {
+                waveShuffleBag.RemoveAt(i);
+            }
+        }
+
+        // 점수 상승으로 새로 해금된 웨이브가 있다면 현재 셔플백에 즉시 편입
+        if (waveShuffleBag.Count > 0)
+        {
+            float minWeight = GetMinimumEligibleWaveWeight();
+            for (int i = 0; i < eligibleWaveIndicesBuffer.Count; i++)
+            {
+                int idx = eligibleWaveIndicesBuffer[i];
+                if (knownUnlockedWaveIndices.Add(idx))
+                {
+                    int tickets = CalculateWaveBagTickets(waves[idx], minWeight);
+                    for (int t = 0; t < tickets; t++)
+                    {
+                        int insertPos = Random.Range(0, waveShuffleBag.Count + 1);
+                        waveShuffleBag.Insert(insertPos, idx);
+                    }
+                }
+            }
+        }
+
+        if (waveShuffleBag.Count == 0)
+        {
+            RefillWaveShuffleBag();
+        }
+
+        if (waveShuffleBag.Count == 0)
+        {
+            return -1;
+        }
+
+        int selectedIndex = waveShuffleBag[0];
+        waveShuffleBag.RemoveAt(0);
+        lastSpawnedWaveIndex = selectedIndex;
+        return selectedIndex;
+    }
+
+    private void RefillWaveShuffleBag()
+    {
+        waveShuffleBag.Clear();
+        knownUnlockedWaveIndices.Clear();
+
+        float minWeight = GetMinimumEligibleWaveWeight();
+        for (int i = 0; i < eligibleWaveIndicesBuffer.Count; i++)
+        {
+            int idx = eligibleWaveIndicesBuffer[i];
+            knownUnlockedWaveIndices.Add(idx);
+            int tickets = CalculateWaveBagTickets(waves[idx], minWeight);
+            for (int t = 0; t < tickets; t++)
+            {
+                waveShuffleBag.Add(idx);
+            }
+        }
+
+        for (int i = waveShuffleBag.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            int temp = waveShuffleBag[i];
+            waveShuffleBag[i] = waveShuffleBag[j];
+            waveShuffleBag[j] = temp;
+        }
+
+        // 웨이브 셔플백 리필 시 직전에 나온 웨이브가 바로 연속 출현하지 않도록 방지
+        if (waveShuffleBag.Count > 1 && lastSpawnedWaveIndex >= 0 && waveShuffleBag[0] == lastSpawnedWaveIndex)
+        {
+            for (int i = 1; i < waveShuffleBag.Count; i++)
+            {
+                if (waveShuffleBag[i] != lastSpawnedWaveIndex)
+                {
+                    int temp = waveShuffleBag[0];
+                    waveShuffleBag[0] = waveShuffleBag[i];
+                    waveShuffleBag[i] = temp;
+                    break;
+                }
+            }
+        }
+    }
+
+    private float GetMinimumEligibleWaveWeight()
+    {
+        float minWeight = float.MaxValue;
+        for (int i = 0; i < eligibleWaveIndicesBuffer.Count; i++)
+        {
+            int idx = eligibleWaveIndicesBuffer[i];
+            float w = Mathf.Max(0.01f, waves[idx].weight);
+            if (w < minWeight)
+            {
+                minWeight = w;
+            }
+        }
+
+        return minWeight < float.MaxValue ? minWeight : 1f;
+    }
+
+    private static int CalculateWaveBagTickets(MemeWaveData wave, float minWeight)
+    {
+        if (wave == null)
+        {
+            return 1;
+        }
+
+        float safeWeight = Mathf.Max(0.01f, wave.weight);
+        float safeMinWeight = Mathf.Max(0.01f, minWeight);
+        return Mathf.Clamp(Mathf.RoundToInt(safeWeight / safeMinWeight), 1, 10);
+    }
+
+    private MemeSpawnType ResolveWaveStepSpawnType(MemeWaveData.WaveStep step, MemePatternData pattern)
+    {
+        if (step == null || !step.overrideSpawnSide)
+        {
+            return PickSpawnType(pattern);
+        }
+
+        switch (step.spawnSideOverride)
+        {
+            case SpawnSideOverride.Left:
+                return MemeSpawnType.Left;
+
+            case SpawnSideOverride.Right:
+                return MemeSpawnType.Right;
+
+            case SpawnSideOverride.Top:
+                return MemeSpawnType.Center;
+
+            case SpawnSideOverride.RandomHorizontal:
+            default:
+                return Random.value < 0.5f ? MemeSpawnType.Left : MemeSpawnType.Right;
+        }
+    }
+
+    private float ResolveNormalizedHeightY(float normalizedHeight)
+    {
+        float minY = Mathf.Min(horizontalMinY, horizontalMaxY);
+        float maxY = Mathf.Max(horizontalMinY, horizontalMaxY);
+        return Mathf.Lerp(minY, maxY, Mathf.Clamp01(normalizedHeight));
+    }
+
+    private void ResolvePositions(
+        MemePatternData pattern,
+        MemeSpawnType spawnType,
+        out Vector3 spawnPos,
+        out Vector3 warningPos,
+        bool overrideSide = false,
+        float? overrideY = null)
+    {
+        if (pattern != null && pattern.useCustomPosition && !overrideSide && !overrideY.HasValue)
         {
             spawnPos = new Vector3(pattern.customObstacleSpawnPos.x, pattern.customObstacleSpawnPos.y, 0f);
             warningPos = new Vector3(pattern.customWarningSpawnPos.x, pattern.customWarningSpawnPos.y, 0f);
             return;
         }
 
-        ResolveDefaultPositions(spawnType, out spawnPos, out warningPos);
+        ResolveDefaultPositions(spawnType, out spawnPos, out warningPos, overrideY);
     }
 
-    private void ResolveDefaultPositions(MemeSpawnType spawnType, out Vector3 spawnPos, out Vector3 warningPos)
+    private void ResolveDefaultPositions(MemeSpawnType spawnType, out Vector3 spawnPos, out Vector3 warningPos, float? overrideY = null)
     {
         switch (spawnType)
         {
             case MemeSpawnType.Left:
             {
-                float spawnY = Random.Range(horizontalMinY, horizontalMaxY);
+                float spawnY = overrideY ?? Random.Range(horizontalMinY, horizontalMaxY);
                 spawnPos = new Vector3(leftSpawnX, spawnY, 0f);
                 warningPos = new Vector3(leftWarningX, spawnY + warningOffsetY, 0f);
                 break;
@@ -1010,7 +1558,7 @@ public class MemeAttackSpawner : MonoBehaviour
 
             case MemeSpawnType.Right:
             {
-                float spawnY = Random.Range(horizontalMinY, horizontalMaxY);
+                float spawnY = overrideY ?? Random.Range(horizontalMinY, horizontalMaxY);
                 spawnPos = new Vector3(rightSpawnX, spawnY, 0f);
                 warningPos = new Vector3(rightWarningX, spawnY + warningOffsetY, 0f);
                 break;

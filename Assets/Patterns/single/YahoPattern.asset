@@ -19,7 +19,7 @@ MonoBehaviour:
   soundVolume: 1
   moveSpeed: 10
   warningStyle: 1
-  trajectoryThickness: 1.5
+  trajectoryThickness: 3
   trajectoryColor: {r: 0, g: 1, b: 1, a: 0.35}
   blinkCount: 3
   spawnWeight: 1

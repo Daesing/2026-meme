@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 00b60cf8c72a49c4a890b058e08e9974, type: 3}
+  m_Name: TestWave
+  m_EditorClassIdentifier: Assembly-CSharp::MemeWaveData
+  waveName: "3\uB2E8 \uBAB0\uC544\uCE58\uAE30"
+  minUnlockScore: 0
+  weight: 1
+  postWaveDelay: 1.2
+  steps:
+  - pattern: {fileID: 11400000, guid: ca2f31d5fd91172449b64780bf97d55e, type: 2}
+    delayFromWaveStart: 0
+    overrideSpawnSide: 1
+    spawnSideOverride: 0
+    overrideNormalizedHeight: 0
+    normalizedHeight: 0
+    speedMultiplier: 1
+  - pattern: {fileID: 11400000, guid: 177a9ee24f99a7e47ac383579b7ac20c, type: 2}
+    delayFromWaveStart: 2
+    overrideSpawnSide: 1
+    spawnSideOverride: 1
+    overrideNormalizedHeight: 0
+    normalizedHeight: 0
+    speedMultiplier: 1
+  - pattern: {fileID: 11400000, guid: 2df6fd623dca92a44aea6e7d6bee0862, type: 2}
+    delayFromWaveStart: 4
+    overrideSpawnSide: 1
+    spawnSideOverride: 2
+    overrideNormalizedHeight: 1
+    normalizedHeight: 0
+    speedMultiplier: 1

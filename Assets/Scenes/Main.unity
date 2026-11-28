@@ -549,7 +549,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!61 &102368381
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -1621,11 +1621,22 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MemeAttackSpawner
   orderMode: 0
   patterns:
-  - {fileID: 11400000, guid: 1d10868bffc04e140861e983f466feab, type: 2}
-  initialDelay: 1.5
-  warningDuration: 1
+  - {fileID: 11400000, guid: 44b0721667aec8f40ab228a7828fd3b9, type: 2}
+  - {fileID: 11400000, guid: 177a9ee24f99a7e47ac383579b7ac20c, type: 2}
+  - {fileID: 11400000, guid: c79c58fca86443843ac5e6bd9e637eff, type: 2}
+  - {fileID: 11400000, guid: 2df6fd623dca92a44aea6e7d6bee0862, type: 2}
+  - {fileID: 11400000, guid: ca2f31d5fd91172449b64780bf97d55e, type: 2}
+  waves:
+  - {fileID: 11400000, guid: 6154047e837baa043b58ac706189bec4, type: 2}
+  enableScoreDifficultyScaling: 1
+  maxDifficultyScore: 5000
+  minPostWaveDelayScale: 0.4
+  minPostWaveDelay: 0.45
+  maxDifficultySpeedMultiplier: 1.6
+  initialDelay: 1
+  warningDuration: 0.5
   repeatSpawn: 1
-  spawnInterval: 4.5
+  spawnInterval: 3
   warningPrefab: {fileID: 3835444878251977874, guid: 835ed0ae7c186ea48bbf3bd704bdc1f3, type: 3}
   trajectoryWarningPrefab: {fileID: 4829173645182937461, guid: a4b7c9e2d1f0483a9b5c6e7f8a1d2c3e, type: 3}
   leftWarningX: -9
@@ -1639,8 +1650,8 @@ MonoBehaviour:
   warningSortingOrder: 16
   leftSpawnX: -13
   rightSpawnX: 13
-  horizontalMinY: -4.4
-  horizontalMaxY: -4.4
+  horizontalMinY: -4.5
+  horizontalMaxY: -2
   centerSpawnPosition: {x: 0, y: 1}
   centerRandomOffsetX: 0
 --- !u!1 &519420028
@@ -2151,7 +2162,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!61 &780431780
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -2929,9 +2940,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a1e3c5b9d2f48a0b6c4e2d8f0a1b3c5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerBoxController
-  moveSpeed: 10
+  moveSpeed: 12
   jumpForce: 20
-  maxJumps: 1
+  maxJumps: 2
   gravityScale: 5
   groundCheckDistance: 0.1
   hitFlashColor: {r: 1, g: 0.25, b: 0.25, a: 0.65}

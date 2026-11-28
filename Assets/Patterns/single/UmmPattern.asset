@@ -10,30 +10,30 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 796dcb1e38911fa4b827286cf2770b1c, type: 3}
-  m_Name: RedredPattern
+  m_Name: UmmPattern
   m_EditorClassIdentifier: Assembly-CSharp::MemePatternData
-  obstaclePrefab: {fileID: 5971622906670216916, guid: d8eea3565e9642c498283f16896a5e74, type: 3}
-  overrideSprite: {fileID: 21300000, guid: e2ea123c8c9b69d4b9fb43e5a64017e8, type: 3}
+  obstaclePrefab: {fileID: 7803701249840195810, guid: f944aa2a2778b7c44ae5577b63a5bb1a, type: 3}
+  overrideSprite: {fileID: 21300000, guid: 8c671ef39fed2c049b046f85528d5cce, type: 3}
   overrideMaterial: {fileID: 2100000, guid: 56973eb923c0b894894d0519ab73dc4e, type: 2}
-  attackSfx: {fileID: 0}
+  attackSfx: {fileID: 8300000, guid: b7700a0e8810d8e47a5134102a74567c, type: 3}
   soundVolume: 1
-  moveSpeed: 10
-  warningStyle: 1
-  trajectoryThickness: 1.5
+  moveSpeed: 20
+  warningStyle: 0
+  trajectoryThickness: 2
   trajectoryColor: {r: 0, g: 1, b: 1, a: 0.35}
   blinkCount: 3
   spawnWeight: 1
   allowLeft: 1
   allowRight: 1
-  allowCenter: 0
+  allowCenter: 1
   useCustomPosition: 0
   customObstacleSpawnPos: {x: 0, y: 0}
   customWarningSpawnPos: {x: 0, y: 0}
-  memeTitle: Red Red
-  failComment: "\uB299\uD06C\uD06C \uB299\uD06C\uD06C Red Red"
+  memeTitle: "\uC5C4"
+  failComment: "\uC5C4....."
   formation: 0
-  projectileCount: 3
+  projectileCount: 1
   dualHeightSeparation: 2.4
-  fanTotalAngle: 45
-  burstInterval: 0.3
+  fanTotalAngle: 35
+  burstInterval: 0
   projectileScaleMultiplier: 1
