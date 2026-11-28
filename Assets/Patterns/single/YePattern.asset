@@ -15,9 +15,9 @@ MonoBehaviour:
   obstaclePrefab: {fileID: 7967262924358410485, guid: 87fda03cfe5d6c84b98d6f3cf8c823e1, type: 3}
   overrideSprite: {fileID: 21300000, guid: aa7ea8f43d5185749bbf7de37376e253, type: 3}
   overrideMaterial: {fileID: 2100000, guid: 56973eb923c0b894894d0519ab73dc4e, type: 2}
-  attackSfx: {fileID: 0}
+  attackSfx: {fileID: 8300000, guid: 17baf31c044d78a409ae7b8ec69bdb3d, type: 3}
   soundVolume: 1
-  moveSpeed: 10
+  moveSpeed: 15
   warningStyle: 1
   trajectoryThickness: 3
   trajectoryColor: {r: 0, g: 1, b: 1, a: 0.35}
@@ -29,8 +29,8 @@ MonoBehaviour:
   useCustomPosition: 0
   customObstacleSpawnPos: {x: 0, y: 0}
   customWarningSpawnPos: {x: 0, y: 0}
-  memeTitle: "\uAC70\uC81C \uC57C\uD638"
-  failComment: "\uB974\uC13C\uB290\uAC00 \uB204\uAD70\uC9C4 \uC544\uC2DC\uC8E0?"
+  memeTitle: "\uC608?"
+  failComment: "\uC544 \uC608?"
   formation: 0
   projectileCount: 1
   dualHeightSeparation: 2.4

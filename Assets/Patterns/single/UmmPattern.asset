@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 796dcb1e38911fa4b827286cf2770b1c, type: 3}
   m_Name: UmmPattern
   m_EditorClassIdentifier: Assembly-CSharp::MemePatternData
-  obstaclePrefab: {fileID: 7803701249840195810, guid: f944aa2a2778b7c44ae5577b63a5bb1a, type: 3}
+  obstaclePrefab: {fileID: 5551668217125246808, guid: f944aa2a2778b7c44ae5577b63a5bb1a, type: 3}
   overrideSprite: {fileID: 21300000, guid: 8c671ef39fed2c049b046f85528d5cce, type: 3}
   overrideMaterial: {fileID: 2100000, guid: 56973eb923c0b894894d0519ab73dc4e, type: 2}
   attackSfx: {fileID: 8300000, guid: b7700a0e8810d8e47a5134102a74567c, type: 3}
