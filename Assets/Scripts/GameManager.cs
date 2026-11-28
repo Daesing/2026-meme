@@ -174,6 +174,7 @@ public class GameManager : MonoBehaviour
 
         skipTitleOnNextLoad = true;
         Time.timeScale = 1f;
+        AudioManager.Instance?.ResetBgmOnRestart();
         Scene activeScene = SceneManager.GetActiveScene();
         SceneManager.LoadScene(activeScene.buildIndex);
     }

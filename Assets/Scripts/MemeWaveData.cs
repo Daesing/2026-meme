@@ -53,9 +53,19 @@ public class MemeWaveData : ScriptableObject
     [Tooltip("이 코스가 끝난 뒤 다음 코스 시작 전 휴식 시간(초)")]
     [Min(0f)] public float postWaveDelay = 1.2f;
 
+    [Header("테마 BGM 설정")]
+    [Tooltip("이 웨이브 시작 시 재생할 테마 BGM. 비어 있으면 현재 재생 중인 BGM을 유지합니다.")]
+    [SerializeField] private AudioClip waveBgm;
+
+    [Tooltip("체크 시 이 웨이브가 끝난 뒤 기본 mainBgm으로 복귀합니다. 해제 시 다음 테마 BGM이 나올 때까지 유지됩니다.")]
+    [SerializeField] private bool restoreMainBgmOnEnd = false;
+
     [Header("코스 출격 단계")]
     [Tooltip("웨이브 내에서 순차/동시 출격할 단품 패턴 단계 목록")]
     public List<WaveStep> steps = new List<WaveStep>();
+
+    public AudioClip WaveBgm => waveBgm;
+    public bool RestoreMainBgmOnEnd => restoreMainBgmOnEnd;
 
     public bool HasValidStep()
     {

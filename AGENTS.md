@@ -47,11 +47,12 @@
 - **`MemeWaveData`** (`Assets/Scripts/MemeWaveData.cs`)
   - 기존 단품 `MemePatternData` 에셋을 조합해 '세트 코스요리' 형태의 웨이브를 정의하는 `ScriptableObject` (`CreateAssetMenu: MemeGame/Meme Wave Data`)입니다.
   - 메타데이터: `waveName`, `minUnlockScore`(점수 해금 조건), `weight`(가중치), `postWaveDelay`(코스 종료 후 휴식 시간).
+  - 테마 BGM 설정: `waveBgm`(`WaveBgm`, 웨이브 시작 시 전환할 테마 BGM, 미지정 시 현재 BGM 유지), `restoreMainBgmOnEnd`(`RestoreMainBgmOnEnd`, 웨이브 종료 후 기본 `mainBgm` 복귀 여부).
   - 출격 단계(`List<WaveStep> steps`): `pattern`, `delayFromWaveStart`(0이면 즉시 동시 출격), `overrideSpawnSide` + `spawnSideOverride`(`Left`/`Right`/`Top`/`RandomHorizontal`), `overrideNormalizedHeight` + `normalizedHeight`(0.0~1.0 정규화 Y 높이), `speedMultiplier`(코스 연출용 개별 속도 배율).
 
 - **`MemeAttackSpawner`** (`Assets/Scripts/MemeAttackSpawner.cs`)
   - **웨이브 모드(`waves`) 및 단품 폴백(`patterns`)**: `waves`에 유효한 `MemeWaveData`가 1개 이상 등록되어 있으면 웨이브 모드로 동작하며, 비어 있으면 기존 `patterns` 단품 모드(`MemeOrderMode`: `ShuffleBag` / `Sequential` / `WeightedRandom`)로 자동 폴백합니다.
-  - 웨이브 모드에서는 `GameManager.Instance.Score`를 기준으로 `minUnlockScore <= 현재점수`를 만족하는 웨이브들로 가중치 반영 셔플백을 구성해 순환 실행하며(직전 웨이브 연속 출현 방지 및 해금 시 즉시 편입), 각 `WaveStep`의 `delayFromWaveStart`·방향/높이 오버라이드·`speedMultiplier`를 적용해 동시/순차 출격합니다.
+  - 웨이브 모드에서는 `GameManager.Instance.Score`를 기준으로 `minUnlockScore <= 현재점수`를 만족하는 웨이브들로 가중치 반영 셔플백을 구성해 순환 실행하며(직전 웨이브 연속 출현 방지 및 해금 시 즉시 편입), 각 `WaveStep`의 `delayFromWaveStart`·방향/높이 오버라이드·`speedMultiplier`를 적용해 동시/순차 출격합니다. 또한 웨이브 시작 시 `WaveBgm`이 지정되어 있으면 `AudioManager.Instance.PlayBgm`으로 페이드 전환하고, `RestoreMainBgmOnEnd`가 활성화되어 있으면 웨이브 종료 시 `AudioManager.Instance.RestoreMainBgm`으로 복귀합니다.
   - **점수 기반 난이도 상승(`Score Difficulty Scaling`)**: 점수가 `maxDifficultyScore`에 가까워질수록 `postWaveDelay`가 점진적으로 단축(`minPostWaveDelayScale` 및 `minPostWaveDelay` 하한선 적용)되고, 장애물 이동 속도 배율이 최대 `maxDifficultySpeedMultiplier`(기본 1.6배)까지 상승합니다.
   - 공격 전 `WarningStyle`에 따라 점멸 경고 연출(기본 3회 점멸, `blinkCount` 적용)을 수행하며 `WarningTrajectory`(`WarningTrajectory.prefab`)와 `WarningMark`(`WarningMark.prefab` 또는 런타임 TMP 경고 텍스트)를 스텝별로 안전하게 제어하고, `StopSpawning()`으로 게임 오버 시 모든 활성 스텝 코루틴과 경고를 정리합니다.
 
@@ -71,7 +72,7 @@
 
 ### 보조 시스템 스크립트
 - **`PlayerBoxController`** (`Assets/Scripts/PlayerBoxController.cs`): 2D 플레이어 좌우 이동(`A`/`D`)과 다단 점프(`W`/`Space`, `maxJumps`), `BoxCastAll` 기반 지면 판정, `SetInputEnabled(bool)`을 통한 게임 오버 시 입력 차단을 담당합니다.
-- **`AudioManager`** (`Assets/Scripts/AudioManager.cs`): 싱글톤(`AudioManager.Instance`, `DontDestroyOnLoad`)으로 BGM 및 공통 SFX(`PlayWarningSFX`, `PlayJumpSFX`, `PlayHitSFX`, `PlaySFX`) 재생을 담당합니다.
+- **`AudioManager`** (`Assets/Scripts/AudioManager.cs`): 싱글톤(`AudioManager.Instance`, `DontDestroyOnLoad`)으로 BGM(`PlayBGM`, `Time.unscaledDeltaTime` 기반 페이드 전환 `PlayBgm`, 기본 BGM 복귀 `RestoreMainBgm`, 재시작 시 초기화 `ResetBgmOnRestart`) 및 공통 SFX(`PlayWarningSFX`, `PlayJumpSFX`, `PlayHitSFX`, `PlaySFX`) 재생을 담당합니다.
 - **`CameraFollow2D`** (`Assets/Scripts/CameraFollow2D.cs`): Orthographic 2D 카메라가 `target`을 지정된 `offset`으로 추적하도록 처리합니다.
 
 ### 이벤트 및 데이터 흐름 요약

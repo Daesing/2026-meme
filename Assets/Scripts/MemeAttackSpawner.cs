@@ -327,6 +327,11 @@ public class MemeAttackSpawner : MonoBehaviour
             yield break;
         }
 
+        if (wave.WaveBgm != null && AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayBgm(wave.WaveBgm);
+        }
+
         sortedSteps.Sort((a, b) => Mathf.Max(0f, a.delayFromWaveStart).CompareTo(Mathf.Max(0f, b.delayFromWaveStart)));
 
         int pendingSteps = sortedSteps.Count;
@@ -362,6 +367,11 @@ public class MemeAttackSpawner : MonoBehaviour
         while (pendingSteps > 0)
         {
             yield return null;
+        }
+
+        if (wave.RestoreMainBgmOnEnd && AudioManager.Instance != null)
+        {
+            AudioManager.Instance.RestoreMainBgm();
         }
     }
 
