@@ -21,9 +21,14 @@ public class PlayerBoxController : MonoBehaviour
     [SerializeField] private Color hitFlashColor = new Color(1f, 0.25f, 0.25f, 0.65f);
     [SerializeField, Min(0.01f)] private float hitFlashInterval = 0.12f;
 
+    [Header("Camera Bounds")]
+    [SerializeField] private bool clampToCameraBounds = true;
+    [SerializeField] private float screenEdgePadding = 0.05f;
+
     private Rigidbody2D rb;
     private BoxCollider2D boxCollider;
     private SpriteRenderer spriteRenderer;
+    private float halfWidth;
     private Color originalColor = Color.white;
     private bool hasOriginalColor;
     private Coroutine hitFlashRoutine;
@@ -79,6 +84,7 @@ public class PlayerBoxController : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         boxCollider = GetComponent<BoxCollider2D>();
         CacheSpriteRenderer();
+        CalculateHalfWidth();
 
         rb.gravityScale = gravityScale;
         rb.freezeRotation = true;
@@ -162,6 +168,102 @@ public class PlayerBoxController : MonoBehaviour
         }
 
         rb.linearVelocity = velocity;
+        ClampToCameraBounds();
+    }
+
+    private void CalculateHalfWidth()
+    {
+        if (boxCollider != null)
+        {
+            float colliderHalfWidth = boxCollider.bounds.extents.x;
+            if (colliderHalfWidth > 0f)
+            {
+                halfWidth = colliderHalfWidth;
+                return;
+            }
+
+            halfWidth = Mathf.Abs(boxCollider.size.x * transform.lossyScale.x) * 0.5f;
+            return;
+        }
+
+        if (spriteRenderer != null)
+        {
+            halfWidth = spriteRenderer.bounds.extents.x;
+            return;
+        }
+
+        halfWidth = 0f;
+    }
+
+    private void ClampToCameraBounds()
+    {
+        if (!clampToCameraBounds || rb == null)
+        {
+            return;
+        }
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null || !mainCamera.orthographic)
+        {
+            return;
+        }
+
+        float leftEdge = mainCamera.ViewportToWorldPoint(new Vector3(0f, 0.5f, 0f)).x;
+        float rightEdge = mainCamera.ViewportToWorldPoint(new Vector3(1f, 0.5f, 0f)).x;
+
+        float minX = leftEdge + halfWidth + screenEdgePadding;
+        float maxX = rightEdge - halfWidth - screenEdgePadding;
+
+        if (minX > maxX)
+        {
+            float centerX = (leftEdge + rightEdge) * 0.5f;
+            minX = centerX;
+            maxX = centerX;
+        }
+
+        Vector2 position = rb.position;
+        Vector2 velocity = rb.linearVelocity;
+        bool positionClamped = false;
+        bool velocityClamped = false;
+
+        if (position.x <= minX)
+        {
+            if (position.x < minX)
+            {
+                position.x = minX;
+                positionClamped = true;
+            }
+
+            if (velocity.x < 0f)
+            {
+                velocity.x = 0f;
+                velocityClamped = true;
+            }
+        }
+        else if (position.x >= maxX)
+        {
+            if (position.x > maxX)
+            {
+                position.x = maxX;
+                positionClamped = true;
+            }
+
+            if (velocity.x > 0f)
+            {
+                velocity.x = 0f;
+                velocityClamped = true;
+            }
+        }
+
+        if (positionClamped)
+        {
+            rb.position = position;
+        }
+
+        if (velocityClamped)
+        {
+            rb.linearVelocity = velocity;
+        }
     }
 
     private bool CheckGrounded()
