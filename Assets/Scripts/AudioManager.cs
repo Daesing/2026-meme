@@ -20,6 +20,7 @@ public class AudioManager : MonoBehaviour
     [SerializeField] private AudioClip warningSfx;
     [SerializeField] private AudioClip jumpSfx;
     [SerializeField] private AudioClip hitSfx;
+    [SerializeField] private AudioClip gameOverSfx;
     [SerializeField, Range(0f, 1f)] private float sfxVolume = 1f;
 
     private Coroutine bgmFadeRoutine;
@@ -46,14 +47,8 @@ public class AudioManager : MonoBehaviour
         }
 
         EnsureAudioSources();
-    }
-
-    private void Start()
-    {
-        if (mainBgm != null)
-        {
-            PlayBGM(mainBgm, bgmVolume);
-        }
+        bgmSource.playOnAwake = false;
+        bgmSource.Stop();
     }
 
     private void OnDisable()
@@ -157,12 +152,78 @@ public class AudioManager : MonoBehaviour
 
     public void StopBGM()
     {
+        StopBgm(0f);
+    }
+
+    public void StopBgm(float fadeDuration = 0f)
+    {
         StopBgmFadeRoutine();
 
-        if (bgmSource != null && bgmSource.isPlaying)
+        float defaultVolume = Mathf.Clamp01(bgmVolume);
+        targetBgmVolume = defaultVolume;
+
+        if (bgmSource == null)
+        {
+            return;
+        }
+
+        if (fadeDuration <= 0f || !isActiveAndEnabled || !bgmSource.isPlaying)
         {
             bgmSource.Stop();
+            bgmSource.volume = defaultVolume;
+            return;
         }
+
+        bgmFadeRoutine = StartCoroutine(FadeOutAndStopBgmRoutine(fadeDuration, defaultVolume));
+    }
+
+    public void RestartMainBgm()
+    {
+        StopBgmFadeRoutine();
+
+        if (mainBgm == null)
+        {
+            return;
+        }
+
+        EnsureAudioSources();
+
+        float defaultVolume = Mathf.Clamp01(bgmVolume);
+        targetBgmVolume = defaultVolume;
+
+        bgmSource.Stop();
+        bgmSource.clip = mainBgm;
+        bgmSource.loop = true;
+        bgmSource.volume = defaultVolume;
+        bgmSource.time = 0f;
+        bgmSource.Play();
+    }
+
+    private IEnumerator FadeOutAndStopBgmRoutine(float fadeDuration, float defaultVolume)
+    {
+        if (bgmSource != null && bgmSource.isPlaying && bgmSource.volume > 0f)
+        {
+            float startVolume = bgmSource.volume;
+            float elapsed = 0f;
+
+            while (elapsed < fadeDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = fadeDuration > 0f ? Mathf.Clamp01(elapsed / fadeDuration) : 1f;
+                bgmSource.volume = Mathf.Lerp(startVolume, 0f, t);
+                yield return null;
+            }
+        }
+
+        if (bgmSource != null)
+        {
+            bgmSource.Stop();
+            bgmSource.volume = defaultVolume;
+        }
+
+        targetBgmVolume = defaultVolume;
+        pendingBgmClip = null;
+        bgmFadeRoutine = null;
     }
 
     private IEnumerator FadeBgmRoutine(AudioClip nextClip, float fadeDuration, float restoreVolume)
@@ -237,6 +298,16 @@ public class AudioManager : MonoBehaviour
     public void PlayHitSFX(float volume = 1f)
     {
         PlaySFX(hitSfx, volume);
+    }
+
+    public void PlayGameOverSfx(float volume = 1f)
+    {
+        if (gameOverSfx == null)
+        {
+            return;
+        }
+
+        PlaySFX(gameOverSfx, volume);
     }
 
     private void EnsureAudioSources()

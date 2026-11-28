@@ -111,6 +111,7 @@ public class GameManager : MonoBehaviour
             isGameStarted = false;
             DisablePlayerInput();
             StopSpawners();
+            AudioManager.Instance?.StopBgm();
             OnHpChanged?.Invoke(currentHp, maxHp);
             OnScoreChanged?.Invoke(score);
         }
@@ -147,6 +148,7 @@ public class GameManager : MonoBehaviour
         isGameStarted = true;
         Time.timeScale = 1f;
 
+        AudioManager.Instance?.RestartMainBgm();
         EnablePlayerInput();
         StartSpawners();
 
@@ -173,8 +175,8 @@ public class GameManager : MonoBehaviour
         OnScoreChanged?.Invoke(score);
 
         skipTitleOnNextLoad = true;
+        AudioManager.Instance?.StopBgm();
         Time.timeScale = 1f;
-        AudioManager.Instance?.ResetBgmOnRestart();
         Scene activeScene = SceneManager.GetActiveScene();
         SceneManager.LoadScene(activeScene.buildIndex);
     }
@@ -205,6 +207,8 @@ public class GameManager : MonoBehaviour
 
         DisablePlayerInput();
         StopSpawners();
+        AudioManager.Instance?.StopBgm();
+        AudioManager.Instance?.PlayGameOverSfx();
 
         if (!isActiveAndEnabled)
         {

@@ -37,7 +37,8 @@
 - **`GameManager`** (`Assets/Scripts/GameManager.cs`)
   - 싱글톤(`GameManager.Instance`)으로 게임 전체 상태(`isGameOver`), 플레이어 체력(`maxHp`, `currentHp`), 생존 시간(`survivalTime`), 점수(`score`, `scorePerSecond` 기반)를 총괄합니다.
   - `MemeAttackObstacle.OnPlayerHit` 정적 이벤트를 구독하여 피격 처리(`HandleMemeAttackHit` → `ApplyPlayerDamage`)와 게임오버 시퀀스(`TriggerGameOver` → `GameOverSequenceRoutine`)를 실행합니다.
-  - 게임오버 시 플레이어 입력 비활성화, 스포너 중단, 히트 필 연출 대기, `Time.timeScale = 0f` 적용, `ResultReportUI.ShowReport` 호출 및 `OnGameOver` / `OnGameOverResultReady` 이벤트를 발행합니다.
+  - 씬 로드 직후 수험표 타이틀 화면 대기 상태(`useTitleScreen && !skipTitleOnNextLoad`)에서는 플레이어 입력 차단, 스포너 중단 및 `AudioManager.StopBgm()` 호출로 무음 대기 상태를 유지하며, 플레이어가 '시험 응시하기' 버튼을 눌러 실제 게임이 시작(`StartExam`)될 때만 `AudioManager.RestartMainBgm()`으로 `mainBgm`을 처음(`time = 0f`)부터 재생합니다.
+  - 게임오버 시 플레이어 입력 비활성화, 스포너 중단, BGM 정지(`AudioManager.StopBgm`) 및 게임오버 효과음(`AudioManager.PlayGameOverSfx`) 재생, 히트 필 연출 대기, `Time.timeScale = 0f` 적용, `ResultReportUI.ShowReport` 호출 및 `OnGameOver` / `OnGameOverResultReady` 이벤트를 발행합니다.
   - **중요: 별도의 `PlayerHealth` 스크립트는 존재하지 않으며, 체력 시스템은 `GameManager`에 통합되어 있습니다. 별도의 체력 스크립트를 새로 만들지 마세요.**
 
 - **`MemePatternData`** (`Assets/Scripts/MemePatternData.cs`)
@@ -72,7 +73,7 @@
 
 ### 보조 시스템 스크립트
 - **`PlayerBoxController`** (`Assets/Scripts/PlayerBoxController.cs`): 2D 플레이어 좌우 이동(`A`/`D`)과 다단 점프(`W`/`Space`, `maxJumps`), `BoxCastAll` 기반 지면 판정, `SetInputEnabled(bool)`을 통한 게임 오버 시 입력 차단을 담당합니다.
-- **`AudioManager`** (`Assets/Scripts/AudioManager.cs`): 싱글톤(`AudioManager.Instance`, `DontDestroyOnLoad`)으로 BGM(`PlayBGM`, `Time.unscaledDeltaTime` 기반 페이드 전환 `PlayBgm`, 기본 BGM 복귀 `RestoreMainBgm`, 재시작 시 초기화 `ResetBgmOnRestart`) 및 공통 SFX(`PlayWarningSFX`, `PlayJumpSFX`, `PlayHitSFX`, `PlaySFX`) 재생을 담당합니다.
+- **`AudioManager`** (`Assets/Scripts/AudioManager.cs`): 싱글톤(`AudioManager.Instance`, `DontDestroyOnLoad`)으로 초기화(`Awake`) 시 `bgmSource.playOnAwake = false` 및 `bgmSource.Stop()`을 강제하여 타이틀 화면에서 BGM 자동 재생을 방지하며, 외부에서 명시적으로 호출할 때만 BGM(`PlayBGM`, `Time.unscaledDeltaTime` 기반 페이드 전환 `PlayBgm`, 기본 BGM 복귀 `RestoreMainBgm`, 재시작 시 초기화 `ResetBgmOnRestart`, 정지/페이드아웃 `StopBgm`, 기본 BGM 처음부터 재시작 `RestartMainBgm`) 및 공통 SFX(`PlayWarningSFX`, `PlayJumpSFX`, `PlayHitSFX`, `PlayGameOverSfx`, `PlaySFX`) 재생을 담당합니다.
 - **`CameraFollow2D`** (`Assets/Scripts/CameraFollow2D.cs`): Orthographic 2D 카메라가 `target`을 지정된 `offset`으로 추적하도록 처리합니다.
 
 ### 이벤트 및 데이터 흐름 요약
@@ -80,7 +81,7 @@
 2. `MemeAttackObstacle` 플레이어 충돌 감지 → `MemeAttackObstacle.OnPlayerHit` 발행
 3. `GameManager` 수신 → HP 차감 및 `AudioManager.PlayHitSFX()`
    - 생존 시: `HitFeelController.PlayHitFeedback()` 호출
-   - HP 0 시: `TriggerGameOver(sourcePattern)` → 입력 차단 & 스포너 중단(활성 웨이브 스텝 코루틴/경고 정리) → `HitFeelController` 연출 → `Time.timeScale = 0f` → `ResultReportUI.ShowReport(...)` 출력
+   - HP 0 시: `TriggerGameOver(sourcePattern)` → 입력 차단 & 스포너 중단(활성 웨이브 스텝 코루틴/경고 정리) → `AudioManager.StopBgm()` / `PlayGameOverSfx()` → `HitFeelController` 연출 → `Time.timeScale = 0f` → `ResultReportUI.ShowReport(...)` 출력 (재시작 시 `StartExam()`에서 `AudioManager.RestartMainBgm()` 호출)
 
 ---
 
@@ -98,3 +99,8 @@
 3. **시간 정지(`Time.timeScale = 0f`) 환경 유의**
    - 히트스톱(`HitFeelController`) 및 게임 오버 상태(`GameManager`)에서 `Time.timeScale = 0f`가 사용됩니다.
    - 피격 연출이나 게임 오버 이후 실행되는 코루틴/애니메이션은 `WaitForSecondsRealtime`과 `Time.unscaledDeltaTime`을 사용해야 하며, 재시작 시 `Time.timeScale = 1f` 복원을 보장하세요.
+
+4. **타이틀 대기·게임 시작·게임 오버·재응시 BGM 라이프사이클 준수**
+   - `AudioManager`는 `DontDestroyOnLoad` 싱글톤으로 초기화 시 `bgmSource.playOnAwake = false` 및 `bgmSource.Stop()`을 강제해 타이틀 화면 대기 상태에서 BGM이 자동 재생되지 않도록 유지해야 합니다.
+   - 씬 로드 직후 수험표 타이틀 화면 대기 상태(`GameManager.Start()`)에서는 `AudioManager.Instance.StopBgm()`으로 무음 상태를 보장하고, 플레이어가 '시험 응시하기'를 눌러 인게임이 시작되는 시점(`GameManager.StartExam()`)에만 `AudioManager.Instance.RestartMainBgm()`을 호출하여 `mainBgm`을 처음(`time = 0f`)부터 기본 볼륨으로 재생하세요.
+   - 게임 오버 시에는 반드시 `AudioManager.Instance.StopBgm()`으로 현재 BGM을 즉시 정지하고, '다시 시험 응시하기' 재시작 시에도 타이틀 화면으로 돌아가는 경우 무음 대기 후 '시험 응시하기' 클릭 시에만 BGM이 재생되도록 일관성을 유지하세요.
