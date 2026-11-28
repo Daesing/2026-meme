@@ -11,7 +11,7 @@ public enum MemeSpawnType
 }
 
 [RequireComponent(typeof(SpriteRenderer))]
-[RequireComponent(typeof(BoxCollider2D))]
+[RequireComponent(typeof(Collider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
 public class MemeAttackObstacle : MonoBehaviour
 {

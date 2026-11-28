@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 796dcb1e38911fa4b827286cf2770b1c, type: 3}
+  m_Name: RedredPattern
+  m_EditorClassIdentifier: Assembly-CSharp::MemePatternData
+  obstaclePrefab: {fileID: 5971622906670216916, guid: d8eea3565e9642c498283f16896a5e74, type: 3}
+  overrideSprite: {fileID: 21300000, guid: e2ea123c8c9b69d4b9fb43e5a64017e8, type: 3}
+  overrideMaterial: {fileID: 2100000, guid: 56973eb923c0b894894d0519ab73dc4e, type: 2}
+  attackSfx: {fileID: 0}
+  soundVolume: 1
+  moveSpeed: 10
+  warningStyle: 1
+  trajectoryThickness: 1.5
+  trajectoryColor: {r: 0, g: 1, b: 1, a: 0.35}
+  blinkCount: 3
+  spawnWeight: 1
+  allowLeft: 1
+  allowRight: 1
+  allowCenter: 0
+  useCustomPosition: 0
+  customObstacleSpawnPos: {x: 0, y: 0}
+  customWarningSpawnPos: {x: 0, y: 0}
+  memeTitle: Red Red
+  failComment: "\uB299\uD06C\uD06C \uB299\uD06C\uD06C Red Red"
+  formation: 0
+  projectileCount: 3
+  dualHeightSeparation: 2.4
+  fanTotalAngle: 45
+  burstInterval: 0.3
+  projectileScaleMultiplier: 1

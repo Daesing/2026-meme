@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 796dcb1e38911fa4b827286cf2770b1c, type: 3}
   m_Name: YahoPattern
   m_EditorClassIdentifier: Assembly-CSharp::MemePatternData
-  obstaclePrefab: {fileID: 7700684619889786532, guid: efb99c3e86fe59247b81d25beef70832, type: 3}
-  overrideSprite: {fileID: -1936918323730878269, guid: fa7c16c80b22e9f4ab653f6aa7d5afae, type: 3}
+  obstaclePrefab: {fileID: 929055606100931318, guid: 4a72b2a7734e7ce45b5a2180cd91ff2f, type: 3}
+  overrideSprite: {fileID: 21300000, guid: fa7c16c80b22e9f4ab653f6aa7d5afae, type: 3}
   overrideMaterial: {fileID: 2100000, guid: 56973eb923c0b894894d0519ab73dc4e, type: 2}
   attackSfx: {fileID: 8300000, guid: 6728b08447e0f754cb9d1a98a3876ceb, type: 3}
   soundVolume: 1

@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 #endif
 
 [RequireComponent(typeof(Rigidbody2D))]
-[RequireComponent(typeof(BoxCollider2D))]
+[RequireComponent(typeof(Collider2D))]
 public class PlayerBoxController : MonoBehaviour
 {
     [Header("Movement")]
@@ -26,7 +26,7 @@ public class PlayerBoxController : MonoBehaviour
     [SerializeField] private float screenEdgePadding = 0.05f;
 
     private Rigidbody2D rb;
-    private BoxCollider2D boxCollider;
+    private Collider2D playerCollider;
     private SpriteRenderer spriteRenderer;
     private float halfWidth;
     private Color originalColor = Color.white;
@@ -82,7 +82,7 @@ public class PlayerBoxController : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
-        boxCollider = GetComponent<BoxCollider2D>();
+        playerCollider = GetComponent<Collider2D>();
         CacheSpriteRenderer();
         CalculateHalfWidth();
 
@@ -173,17 +173,20 @@ public class PlayerBoxController : MonoBehaviour
 
     private void CalculateHalfWidth()
     {
-        if (boxCollider != null)
+        if (playerCollider != null)
         {
-            float colliderHalfWidth = boxCollider.bounds.extents.x;
+            float colliderHalfWidth = playerCollider.bounds.extents.x;
             if (colliderHalfWidth > 0f)
             {
                 halfWidth = colliderHalfWidth;
                 return;
             }
 
-            halfWidth = Mathf.Abs(boxCollider.size.x * transform.lossyScale.x) * 0.5f;
-            return;
+            if (playerCollider is BoxCollider2D boxCollider)
+            {
+                halfWidth = Mathf.Abs(boxCollider.size.x * transform.lossyScale.x) * 0.5f;
+                return;
+            }
         }
 
         if (spriteRenderer != null)
@@ -268,14 +271,19 @@ public class PlayerBoxController : MonoBehaviour
 
     private bool CheckGrounded()
     {
-        Bounds bounds = boxCollider.bounds;
+        if (playerCollider == null)
+        {
+            return false;
+        }
+
+        Bounds bounds = playerCollider.bounds;
         Vector2 castSize = new Vector2(bounds.size.x * 0.9f, bounds.size.y * 0.9f);
         RaycastHit2D[] hits = Physics2D.BoxCastAll(bounds.center, castSize, 0f, Vector2.down, groundCheckDistance);
 
         for (int i = 0; i < hits.Length; i++)
         {
             Collider2D hitCollider = hits[i].collider;
-            if (hitCollider == null || hitCollider == boxCollider || hitCollider.isTrigger)
+            if (hitCollider == null || hitCollider == playerCollider || hitCollider.isTrigger)
             {
                 continue;
             }

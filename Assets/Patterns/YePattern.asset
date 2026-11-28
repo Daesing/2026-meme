@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 796dcb1e38911fa4b827286cf2770b1c, type: 3}
+  m_Name: YePattern
+  m_EditorClassIdentifier: Assembly-CSharp::MemePatternData
+  obstaclePrefab: {fileID: 929055606100931318, guid: 4a72b2a7734e7ce45b5a2180cd91ff2f, type: 3}
+  overrideSprite: {fileID: 21300000, guid: fa7c16c80b22e9f4ab653f6aa7d5afae, type: 3}
+  overrideMaterial: {fileID: 2100000, guid: 56973eb923c0b894894d0519ab73dc4e, type: 2}
+  attackSfx: {fileID: 8300000, guid: 6728b08447e0f754cb9d1a98a3876ceb, type: 3}
+  soundVolume: 1
+  moveSpeed: 10
+  warningStyle: 1
+  trajectoryThickness: 1.5
+  trajectoryColor: {r: 0, g: 1, b: 1, a: 0.35}
+  blinkCount: 3
+  spawnWeight: 1
+  allowLeft: 1
+  allowRight: 1
+  allowCenter: 1
+  useCustomPosition: 0
+  customObstacleSpawnPos: {x: 0, y: 0}
+  customWarningSpawnPos: {x: 0, y: 0}
+  memeTitle: "\uAC70\uC81C \uC57C\uD638"
+  failComment: "\uB974\uC13C\uB290\uAC00 \uB204\uAD70\uC9C4 \uC544\uC2DC\uC8E0?"
+  formation: 0
+  projectileCount: 1
+  dualHeightSeparation: 2.4
+  fanTotalAngle: 35
+  burstInterval: 0
+  projectileScaleMultiplier: 1

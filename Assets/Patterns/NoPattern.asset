@@ -10,14 +10,14 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 796dcb1e38911fa4b827286cf2770b1c, type: 3}
-  m_Name: YahoPattern 1
+  m_Name: NoPattern
   m_EditorClassIdentifier: Assembly-CSharp::MemePatternData
-  obstaclePrefab: {fileID: 7700684619889786532, guid: efb99c3e86fe59247b81d25beef70832, type: 3}
-  overrideSprite: {fileID: -1936918323730878269, guid: fa7c16c80b22e9f4ab653f6aa7d5afae, type: 3}
+  obstaclePrefab: {fileID: 3142200572300630260, guid: ea463e262b3ce304b8265cfe17289e3d, type: 3}
+  overrideSprite: {fileID: 21300000, guid: ff7c788c64d55fc45b98ccf2e658ed30, type: 3}
   overrideMaterial: {fileID: 2100000, guid: 56973eb923c0b894894d0519ab73dc4e, type: 2}
-  attackSfx: {fileID: 8300000, guid: 6728b08447e0f754cb9d1a98a3876ceb, type: 3}
+  attackSfx: {fileID: 0}
   soundVolume: 1
-  moveSpeed: 10
+  moveSpeed: 15
   warningStyle: 1
   trajectoryThickness: 1.5
   trajectoryColor: {r: 0, g: 1, b: 1, a: 0.35}
@@ -29,11 +29,11 @@ MonoBehaviour:
   useCustomPosition: 0
   customObstacleSpawnPos: {x: 0, y: 0}
   customWarningSpawnPos: {x: 0, y: 0}
-  memeTitle: "\uAC70\uC81C \uC57C\uD638"
-  failComment: "\uB974\uC13C\uB290\uAC00 \uB204\uAD70\uC9C4 \uC544\uC2DC\uC8E0?"
+  memeTitle: "\uC544\uB1E8"
+  failComment: "\uC544\uB1E8\uC544\uB1E8\uC544\uB1E8"
   formation: 3
   projectileCount: 3
   dualHeightSeparation: 2.4
   fanTotalAngle: 45
-  burstInterval: 0.2
+  burstInterval: 0
   projectileScaleMultiplier: 1
